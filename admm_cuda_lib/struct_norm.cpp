@@ -27,5 +27,5 @@ void struct_norm(
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
-  m.def("struct_norm", &norm, "in-place struct_norm");
+  m.def("struct_norm", &struct_norm, "in-place struct_norm");
 }

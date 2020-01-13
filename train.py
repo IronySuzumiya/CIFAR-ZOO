@@ -125,8 +125,8 @@ def test(test_loader, net, criterion, optimizer, epoch, device):
     return test_loss, test_acc
 
 
-def save_checkpoint_(net, acc, epoch, optimizer, ckpt_file_name):
-    global best_prec
+def save_checkpoint_(net, acc, epoch, optimizer, ckpt_name):
+    global args, best_prec
 
     state = {
         'state_dict': net.state_dict(),
@@ -135,7 +135,7 @@ def save_checkpoint_(net, acc, epoch, optimizer, ckpt_file_name):
         'optimizer': optimizer.state_dict(),
     }
     is_best = acc > best_prec
-    save_checkpoint(state, is_best, ckpt_file_name)
+    save_checkpoint(state, is_best, args.work_path + '/' + ckpt_name)
     if is_best:
         best_prec = acc
 
@@ -237,7 +237,7 @@ def main():
                 train(train_loader, net, criterion, optimizer, epoch, device)
                 if epoch == 0 or (epoch + 1) % config.eval_freq == 0 or epoch == config.pruning.pre_epochs - 1:
                     _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
-                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_file_name)
+                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_name)
             logger.info(
                 "======== Pre-Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
@@ -257,7 +257,7 @@ def main():
                 if epoch == admm_begin_epoch or (epoch + 1 - admm_begin_epoch) % config.eval_freq == 0 \
                         or epoch == config.pruning.pre_epochs + config.pruning.epochs - 1:
                     _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
-                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_file_name)
+                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_name)
             logger.info(
                 "======== Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
@@ -285,7 +285,7 @@ def main():
                         (epoch + 1 - config.pruning.pre_epochs - config.pruning.epochs) % config.eval_freq == 0 or \
                         epoch == config.epochs - 1:
                     _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
-                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_file_name)
+                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_name)
             logger.info(
                 "======== Re-Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
@@ -301,7 +301,7 @@ def main():
             train(train_loader, net, criterion, optimizer, epoch, device)
             if epoch == 0 or (epoch + 1) % config.eval_freq == 0 or epoch == config.epochs - 1:
                 _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
-                save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_file_name)
+                save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_name)
         logger.info(
         "======== Training Finished.   best_test_acc: {:.3f}% ========".format(best_prec))
     writer.close()

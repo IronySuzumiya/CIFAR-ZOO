@@ -17,6 +17,8 @@ from utils import Logger, count_parameters, data_augmentation, \
     load_checkpoint, get_data_loader, mixup_data, mixup_criterion, \
     save_checkpoint, adjust_learning_rate, get_current_lr
 
+from admm import ADMMLoss
+
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
 parser.add_argument('--resume', action='store_true',
@@ -158,6 +160,12 @@ def main():
 
     # define loss and optimizer
     criterion = nn.CrossEntropyLoss()
+    if 'pruning' in config:
+        assert config.pruning.method == 'ADMM'
+        assert config.epochs == config.pruning.pre_epochs + config.pruning.epochs + config.pruning.re_epochs
+        admm_criterion = ADMMLoss(net, device, config.pruning.rho,
+            config.pruning.ou_height, config.pruning.ou_width, config.pruning.percent)
+
     optimizer = torch.optim.SGD(
         net.parameters(),
         config.lr_scheduler.base_lr,
@@ -169,7 +177,11 @@ def main():
     last_epoch = -1
     best_prec = 0
     if args.work_path:
-        ckpt_file_name = args.work_path + '/' + config.ckpt_name + '.pth.tar'
+        if 'pruning' in config:
+            ckpt_name = "{}_{}x{}".format(config.ckpt_name, config.pruning.ou_height, config.pruning.ou_width)
+        else:
+            ckpt_name = config.ckpt_name
+        ckpt_file_name = args.work_path + '/' + ckpt_name + '.pth.tar'
         if args.resume:
             best_prec, last_epoch = load_checkpoint(
                 ckpt_file_name, net, optimizer=optimizer)
@@ -184,17 +196,76 @@ def main():
     train_loader, test_loader = get_data_loader(
         transform_train, transform_test, config)
 
-    logger.info("            =======  Training  =======\n")
-    for epoch in range(last_epoch + 1, config.epochs):
-        lr = adjust_learning_rate(optimizer, epoch, config)
-        writer.add_scalar('learning_rate', lr, epoch)
-        train(train_loader, net, criterion, optimizer, epoch, device)
-        if epoch == 0 or (
-                epoch + 1) % config.eval_freq == 0 or epoch == config.epochs - 1:
-            test(test_loader, net, criterion, optimizer, epoch, device)
-    writer.close()
-    logger.info(
+    if 'pruning' in config:
+        begin_epoch = last_epoch + 1
+        if begin_epoch < config.pruning.pre_epochs:
+            logger.info("            =======  Pre-Training  =======\n")
+            for epoch in range(begin_epoch, config.pruning.pre_epochs):
+                lr = adjust_learning_rate(optimizer, epoch, config)
+                writer.add_scalar('learning_rate', lr, epoch)
+                train(train_loader, net, criterion, optimizer, epoch, device)
+                if epoch == 0 or (epoch + 1) % config.eval_freq == 0 or epoch == config.pruning.pre_epochs - 1:
+                    test(test_loader, net, criterion, optimizer, epoch, device)
+            logger.info(
+                "======== Pre-Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
+
+        if begin_epoch < config.pruning.pre_epochs + config.pruning.epochs:
+            admm_begin_epoch = max(begin_epoch, config.pruning.pre_epochs)
+            logger.info("            =======  Training with ADMM pruning  =======\n")
+            for epoch in range(admm_begin_epoch, config.pruning.pre_epochs + config.pruning.epochs):
+                lr = adjust_learning_rate(optimizer, epoch, config)
+                writer.add_scalar('learning_rate', lr, epoch)
+                train(train_loader, net, admm_criterion, optimizer, epoch, device)
+                logger.info("            =======  Updating ADMM State  =======\n")
+                admm_criterion.update_ADMM()
+                logger.info("            =======  Normalized norm of (weight - projection)  =======\n")
+                res_list = admm_criterion.calc_convergence()
+                for name, convrg in res_list:
+                    logger.info("            =======  ({}): {:.4f}  =======\n".format(name, convrg))
+                if epoch == admm_begin_epoch or (epoch + 1 - admm_begin_epoch) % config.eval_freq == 0 \
+                        or epoch == config.pruning.pre_epochs + config.pruning.epochs - 1:
+                    test(test_loader, net, criterion, optimizer, epoch, device)
+            logger.info(
+                "======== Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
+
+            logger.info("            =======  Applying ADMM Pruning  =======\n")
+            admm_criterion.apply_pruning()
+            prune_param, total_param = 0, 0
+            for name, param in net.named_parameters():
+                if name.split('.')[-1] == "weight":
+                    logger.info("            =======  [at weight {}]  =======\n".format(name))
+                    logger.info("            =======  percentage of pruned: {:.4f}%  =======\n".format(100 * (abs(param) == 0).sum().item() / param.numel()))
+                    logger.info("            =======  nonzero parameters after pruning: {} / {}\n  =======\n".format((param != 0).sum().item(), param.numel()))
+                total_param += param.numel()
+                prune_param += (param != 0).sum().item()
+            logger.info("            =======  Total nonzero parameters after pruning: {} / {} ({:.4f}%) =======\n".
+                format(prune_param, total_param, 100 * (total_param - prune_param) / total_param))
+
+        if begin_epoch < config.epochs:
+            retrain_begin_epoch = max(begin_epoch, config.pruning.pre_epochs + config.pruning.epochs)
+            logger.info("            =======  Re-Training  =======\n")
+            for epoch in range(retrain_begin_epoch, config.epochs):
+                lr = adjust_learning_rate(optimizer, epoch, config)
+                writer.add_scalar('learning_rate', lr, epoch)
+                train(train_loader, net, criterion, optimizer, epoch, device)
+                if epoch == config.pruning.pre_epochs + config.pruning.epochs or \
+                        (epoch + 1 - config.pruning.pre_epochs - config.pruning.epochs) % config.eval_freq == 0 or \
+                        epoch == config.epochs - 1:
+                    test(test_loader, net, criterion, optimizer, epoch, device)
+            logger.info(
+                "======== Re-Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
+        
+    else:
+        logger.info("            =======  Training  =======\n")
+        for epoch in range(last_epoch + 1, config.epochs):
+            lr = adjust_learning_rate(optimizer, epoch, config)
+            writer.add_scalar('learning_rate', lr, epoch)
+            train(train_loader, net, criterion, optimizer, epoch, device)
+            if epoch == 0 or (epoch + 1) % config.eval_freq == 0 or epoch == config.epochs - 1:
+                test(test_loader, net, criterion, optimizer, epoch, device)
+        logger.info(
         "======== Training Finished.   best_test_acc: {:.3f}% ========".format(best_prec))
+    writer.close()
 
 
 if __name__ == "__main__":

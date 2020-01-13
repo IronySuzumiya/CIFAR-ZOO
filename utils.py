@@ -168,6 +168,9 @@ def adjust_learning_rate(optimizer, epoch, config):
     if config.lr_scheduler.type == 'STEP':
         if epoch in config.lr_scheduler.lr_epochs:
             lr *= config.lr_scheduler.lr_mults
+        if 'pruning' in config:
+            if epoch == config.pruning.pre_epochs + config.pruning.epochs:
+                lr = config.lr_scheduler.base_lr
     elif config.lr_scheduler.type == 'COSINE':
         ratio = epoch / config.epochs
         lr = config.lr_scheduler.min_lr + \

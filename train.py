@@ -221,12 +221,12 @@ def main():
                 lr = adjust_learning_rate(optimizer, epoch, config)
                 writer.add_scalar('learning_rate', lr, epoch)
                 train(train_loader, net, admm_criterion, optimizer, epoch, device)
-                logger.info("            =======  Updating ADMM State  =======\n")
+                logger.info("            =======  Updating ADMM State  =======")
                 admm_criterion.update_ADMM()
-                logger.info("            =======  Normalized norm of (weight - projection)  =======\n")
+                logger.info("            =======  Normalized norm of (weight - projection)  =======")
                 res_list = admm_criterion.calc_convergence()
                 for name, convrg in res_list:
-                    logger.info("            =======  ({}): {:.4f}  =======\n".format(name, convrg))
+                    logger.info("            =======  ({}): {:.4f}  =======".format(name, convrg))
                 if epoch == admm_begin_epoch or (epoch + 1 - admm_begin_epoch) % config.eval_freq == 0 \
                         or epoch == config.pruning.pre_epochs + config.pruning.epochs - 1:
                     _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
@@ -234,14 +234,14 @@ def main():
             logger.info(
                 "======== Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
-            logger.info("            =======  Applying ADMM Pruning  =======\n")
+            logger.info("            =======  Applying ADMM Pruning  =======")
             admm_criterion.apply_pruning()
             prune_param, total_param = 0, 0
             for name, param in net.named_parameters():
                 if name.split('.')[-1] == "weight":
-                    logger.info("            =======  [at weight {}]  =======\n".format(name))
-                    logger.info("            =======  percentage of pruned: {:.4f}%  =======\n".format(100 * (abs(param) == 0).sum().item() / param.numel()))
-                    logger.info("            =======  nonzero parameters after pruning: {} / {}\n  =======\n".format((param != 0).sum().item(), param.numel()))
+                    logger.info("            =======  [at weight {}]  =======".format(name))
+                    logger.info("            =======  percentage of pruned: {:.4f}%  =======".format(100 * (abs(param) == 0).sum().item() / param.numel()))
+                    logger.info("            =======  nonzero parameters after pruning: {} / {}  =======".format((param != 0).sum().item(), param.numel()))
                 total_param += param.numel()
                 prune_param += (param != 0).sum().item()
             logger.info("            =======  Total nonzero parameters after pruning: {} / {} ({:.4f}%) =======\n".

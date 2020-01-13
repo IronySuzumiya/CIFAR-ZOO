@@ -92,7 +92,7 @@ def train(train_loader, net, criterion, optimizer, epoch, device):
 
 
 def test(test_loader, net, criterion, optimizer, epoch, device):
-    global best_prec, writer
+    global writer
 
     net.eval()
 
@@ -119,8 +119,13 @@ def test(test_loader, net, criterion, optimizer, epoch, device):
     test_acc = correct / total
     writer.add_scalar('test_loss', test_loss, global_step=epoch)
     writer.add_scalar('test_acc', test_acc, global_step=epoch)
-    # Save checkpoint.
-    acc = 100. * correct / total
+
+    return test_loss, test_acc
+
+
+def save_checkpoint_(net, acc, epoch, optimizer, ckpt_file_name):
+    global best_prec
+
     state = {
         'state_dict': net.state_dict(),
         'best_prec': best_prec,
@@ -128,10 +133,9 @@ def test(test_loader, net, criterion, optimizer, epoch, device):
         'optimizer': optimizer.state_dict(),
     }
     is_best = acc > best_prec
-    save_checkpoint(state, is_best, args.work_path + '/' + config.ckpt_name)
+    save_checkpoint(state, is_best, ckpt_file_name)
     if is_best:
         best_prec = acc
-
 
 def main():
     global args, config, last_epoch, best_prec, writer
@@ -205,7 +209,8 @@ def main():
                 writer.add_scalar('learning_rate', lr, epoch)
                 train(train_loader, net, criterion, optimizer, epoch, device)
                 if epoch == 0 or (epoch + 1) % config.eval_freq == 0 or epoch == config.pruning.pre_epochs - 1:
-                    test(test_loader, net, criterion, optimizer, epoch, device)
+                    _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
+                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_file_name)
             logger.info(
                 "======== Pre-Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
@@ -224,7 +229,8 @@ def main():
                     logger.info("            =======  ({}): {:.4f}  =======\n".format(name, convrg))
                 if epoch == admm_begin_epoch or (epoch + 1 - admm_begin_epoch) % config.eval_freq == 0 \
                         or epoch == config.pruning.pre_epochs + config.pruning.epochs - 1:
-                    test(test_loader, net, criterion, optimizer, epoch, device)
+                    _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
+                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_file_name)
             logger.info(
                 "======== Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
@@ -251,7 +257,8 @@ def main():
                 if epoch == config.pruning.pre_epochs + config.pruning.epochs or \
                         (epoch + 1 - config.pruning.pre_epochs - config.pruning.epochs) % config.eval_freq == 0 or \
                         epoch == config.epochs - 1:
-                    test(test_loader, net, criterion, optimizer, epoch, device)
+                    _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
+                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_file_name)
             logger.info(
                 "======== Re-Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
         
@@ -262,7 +269,8 @@ def main():
             writer.add_scalar('learning_rate', lr, epoch)
             train(train_loader, net, criterion, optimizer, epoch, device)
             if epoch == 0 or (epoch + 1) % config.eval_freq == 0 or epoch == config.epochs - 1:
-                test(test_loader, net, criterion, optimizer, epoch, device)
+                _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
+                save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_file_name)
         logger.info(
         "======== Training Finished.   best_test_acc: {:.3f}% ========".format(best_prec))
     writer.close()

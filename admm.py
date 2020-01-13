@@ -49,7 +49,7 @@ class ADMMLoss(nn.Module):
             if self.ou_height > 1 or self.ou_width > 1:
                 rram = z.view(z.shape[0], -1)
                 tmp = torch.zeros(((rram.shape[0] - 1) // self.ou_width + 1, (rram.shape[1] - 1) // self.ou_height + 1)).to(self.device)
-                admm_cuda_lib.norm(rram, tmp, self.ou_width, self.ou_height)
+                admm_cuda_lib.struct_norm(rram, tmp, self.ou_width, self.ou_height)
                 pcen, _ = tmp.view(-1).kthvalue(round(self.percent[idx] * tmp.shape[0] * tmp.shape[1]))
                 upon_threshold = tmp >= pcen
                 res1 = rram.shape[0] % self.ou_width
@@ -95,7 +95,7 @@ class ADMMLoss(nn.Module):
                     rram = weight.view(weight.shape[0], -1)
                     rram_mask = mask.view(mask.shape[0], -1)
                     tmp = torch.zeros(((rram.shape[0] - 1) // self.ou_width + 1, (rram.shape[1] - 1) // self.ou_height + 1)).to(self.device)
-                    admm_cuda_lib.norm(rram, tmp, self.ou_width, self.ou_height)
+                    admm_cuda_lib.struct_norm(rram, tmp, self.ou_width, self.ou_height)
                     pcen, _ = tmp.view(-1).kthvalue(round(self.percent[idx] * tmp.shape[0] * tmp.shape[1]))
                     upon_threshold = tmp >= pcen
                     res1 = rram.shape[0] % self.ou_width

@@ -5,8 +5,8 @@ setup(
     name='admm_cuda_lib',
     ext_modules=[
         CUDAExtension('admm_cuda_lib', [
-            'struct_norm.cpp',
-            'struct_norm_kernel.cu',
+            'admm_cuda_lib.cpp',
+            'admm_cuda_lib_kernel.cu',
         ])
     ],
     cmdclass={

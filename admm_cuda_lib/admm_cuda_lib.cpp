@@ -20,12 +20,12 @@ void struct_norm(
     int ou_w,
     int ou_h)
 {
-  CHECK_INPUT(weights);
-  CHECK_INPUT(norms);
-  struct_norm_cuda(weights, norms, ou_w, ou_h);
+    CHECK_INPUT(weights);
+    CHECK_INPUT(norms);
+    struct_norm_cuda(weights, norms, ou_w, ou_h);
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
-  m.def("struct_norm", &struct_norm, "in-place struct_norm");
+    m.def("struct_norm", &struct_norm, "in-place struct_norm");
 }

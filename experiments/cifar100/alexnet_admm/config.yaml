@@ -13,7 +13,7 @@ dataset: cifar100
 # training parameters
 use_gpu: True
 input_size: 32
-epochs: 120
+epochs: 250
 batch_size: 128
 test_batch: 200
 eval_freq: 2
@@ -43,7 +43,7 @@ lr_scheduler:
   type: STEP    
   base_lr: 0.1
   # only for STEP
-  lr_epochs: [30, 50, 70, 95, 105, 115] 
+  lr_epochs: [90, 130, 170, 215, 230, 240]
   lr_mults: 0.1
   # for HTD and COSINE
   min_lr: 0.0
@@ -53,9 +53,9 @@ lr_scheduler:
 
 pruning:
   method: ADMM
-  pre_epochs: 10
-  epochs: 70
-  re_epochs: 40
+  pre_epochs: 20
+  epochs: 170
+  re_epochs: 60
   rho: 0.01
   percent: [0.8, 0.92, 0.93, 0.94, 0.95, 0.99]
   ou_height: 4

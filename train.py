@@ -19,6 +19,8 @@ from utils import Logger, count_parameters, data_augmentation, \
 
 from admm import ADMMLoss
 
+import multiprocessing as mp
+
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
 parser.add_argument('--resume', action='store_true',
@@ -145,21 +147,43 @@ def update_dict(dict, n):
     else:
         dict[n] = 1
 
+def show_statistic_result_(rram_proj, i_beg, i_end, j_beg, j_end, n_ou_with_nonzero, n_ou_with_positive, n_ou_with_negative):
+    for i in range(i_beg, i_end):
+        for j in range(j_beg, j_end):
+            ou = rram_proj[i * config.pruning.ou_height : (i + 1) * config.pruning.ou_height, j * config.pruning.ou_width : (j + 1) * config.pruning.ou_width]
+            update_dict(n_ou_with_nonzero, ou.nonzero().shape[0])
+            update_dict(n_ou_with_positive, (ou > 0).nonzero().shape[0])
+            update_dict(n_ou_with_negative, (ou < 0).nonzero().shape[0])
+
 def show_statistic_result(model):
     global config
 
     n_ou_with_nonzero = {}
     n_ou_with_positive = {}
     n_ou_with_negative = {}
+
+    pool = mp.Pool(processes=16)
+
+    i_block_size = config.pruning.ou_height * 16
+    j_block_size = config.pruning.ou_width * 16
+
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight":
             rram_proj = param.view(param.shape[0], -1).T
-            for i in range((rram_proj.shape[0] - 1) // config.pruning.ou_height + 1):
-                for j in range((rram_proj.shape[1] - 1) // config.pruning.ou_width + 1):
-                    ou = rram_proj[i * config.pruning.ou_height : (i + 1) * config.pruning.ou_height, j * config.pruning.ou_width : (j + 1) * config.pruning.ou_width]
-                    update_dict(n_ou_with_nonzero, ou.nonzero().shape[0])
-                    update_dict(n_ou_with_positive, (ou > 0).nonzero().shape[0])
-                    update_dict(n_ou_with_negative, (ou < 0).nonzero().shape[0])
+            i_len = (rram_proj.shape[0] - 1) // config.pruning.ou_height + 1
+            j_len = (rram_proj.shape[1] - 1) // config.pruning.ou_width + 1
+            n_i_block = (i_len - 1) // i_block_size + 1
+            n_j_block = (j_len - 1) // j_block_size + 1
+            for i in range(n_i_block):
+                for j in range(n_j_block):
+                    pool.apply_async(
+                        show_statistic_result_, (rram_proj,
+                        i * i_block_size, min((i + 1) * i_block_size, i_len),
+                        j * j_block_size, min((j + 1) * j_block_size, j_len),
+                        n_ou_with_nonzero, n_ou_with_positive, n_ou_with_negative))
+    pool.close()
+    pool.join()
+
     logger.info("   == n_ou_with_nonzero: {}".format(n_ou_with_nonzero))
     logger.info("   == n_ou_with_positive: {}".format(n_ou_with_positive))
     logger.info("   == n_ou_with_negative: {}".format(n_ou_with_negative))

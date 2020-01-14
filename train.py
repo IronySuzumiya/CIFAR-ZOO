@@ -19,7 +19,8 @@ from utils import Logger, count_parameters, data_augmentation, \
 
 from admm import ADMMLoss
 
-import multiprocessing as mp
+import torch.multiprocessing as mp
+import traceback
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
@@ -127,7 +128,7 @@ def test(test_loader, net, criterion, optimizer, epoch, device):
     return test_loss, test_acc
 
 
-def save_checkpoint_(net, acc, epoch, optimizer, ckpt_name):
+def save_checkpoint_(net, acc, epoch, optimizer, admm_state, ckpt_name):
     global args, best_prec
 
     state = {
@@ -135,6 +136,7 @@ def save_checkpoint_(net, acc, epoch, optimizer, ckpt_name):
         'best_prec': best_prec,
         'last_epoch': epoch,
         'optimizer': optimizer.state_dict(),
+        'admm_state_dict': admm_state,
     }
     is_best = acc > best_prec
     save_checkpoint(state, is_best, args.work_path + '/' + ckpt_name)
@@ -164,6 +166,8 @@ def show_statistic_result(model):
 
     pool = mp.Pool(processes=16)
 
+    process_results = []
+
     i_block_size = config.pruning.ou_height * 16
     j_block_size = config.pruning.ou_width * 16
 
@@ -176,13 +180,23 @@ def show_statistic_result(model):
             n_j_block = (j_len - 1) // j_block_size + 1
             for i in range(n_i_block):
                 for j in range(n_j_block):
-                    pool.apply_async(
-                        show_statistic_result_, (rram_proj,
-                        i * i_block_size, min((i + 1) * i_block_size, i_len),
-                        j * j_block_size, min((j + 1) * j_block_size, j_len),
-                        n_ou_with_nonzero, n_ou_with_positive, n_ou_with_negative))
+                    process_results.append(
+                        pool.apply_async(
+                            show_statistic_result_, (rram_proj,
+                            i * i_block_size, min((i + 1) * i_block_size, i_len),
+                            j * j_block_size, min((j + 1) * j_block_size, j_len),
+                            n_ou_with_nonzero, n_ou_with_positive, n_ou_with_negative))
+                    )
     pool.close()
     pool.join()
+
+    ans = []
+        
+    for j in range(len(process_results)):
+        try:
+            ans.append(process_results[j].get())
+        except:
+            traceback.print_exc(file=args.work_path + '/error.txt')
 
     logger.info("   == n_ou_with_nonzero: {}".format(n_ou_with_nonzero))
     logger.info("   == n_ou_with_positive: {}".format(n_ou_with_positive))
@@ -220,6 +234,8 @@ def main():
         assert config.epochs == config.pruning.pre_epochs + config.pruning.epochs + config.pruning.re_epochs
         admm_criterion = ADMMLoss(net, device, config.pruning.rho,
             config.pruning.ou_height, config.pruning.ou_width, config.pruning.percent)
+    else:
+        admm_criterion = None
 
     optimizer = torch.optim.SGD(
         net.parameters(),
@@ -239,7 +255,7 @@ def main():
         ckpt_file_name = args.work_path + '/' + ckpt_name + '.pth.tar'
         if args.resume:
             best_prec, last_epoch = load_checkpoint(
-                ckpt_file_name, net, optimizer=optimizer)
+                ckpt_file_name, net, optimizer=optimizer, admm_criterion=admm_criterion)
 
     # load training data, do data augmentation and get data loader
     transform_train = transforms.Compose(
@@ -261,7 +277,7 @@ def main():
                 train(train_loader, net, criterion, optimizer, epoch, device)
                 if epoch == 0 or (epoch + 1) % config.eval_freq == 0 or epoch == config.pruning.pre_epochs - 1:
                     _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
-                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_name)
+                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, admm_criterion.get_state(), ckpt_name)
             logger.info(
                 "======== Pre-Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
@@ -281,7 +297,7 @@ def main():
                 if epoch == admm_begin_epoch or (epoch + 1 - admm_begin_epoch) % config.eval_freq == 0 \
                         or epoch == config.pruning.pre_epochs + config.pruning.epochs - 1:
                     _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
-                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_name)
+                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, admm_criterion.get_state(), ckpt_name)
             logger.info(
                 "======== Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
@@ -309,7 +325,7 @@ def main():
                         (epoch + 1 - config.pruning.pre_epochs - config.pruning.epochs) % config.eval_freq == 0 or \
                         epoch == config.epochs - 1:
                     _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
-                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_name)
+                    save_checkpoint_(net, test_acc * 100., epoch, optimizer, admm_criterion.get_state(), ckpt_name)
             logger.info(
                 "======== Re-Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
@@ -325,7 +341,7 @@ def main():
             train(train_loader, net, criterion, optimizer, epoch, device)
             if epoch == 0 or (epoch + 1) % config.eval_freq == 0 or epoch == config.epochs - 1:
                 _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
-                save_checkpoint_(net, test_acc * 100., epoch, optimizer, ckpt_name)
+                save_checkpoint_(net, test_acc * 100., epoch, optimizer, None, ckpt_name)
         logger.info(
         "======== Training Finished.   best_test_acc: {:.3f}% ========".format(best_prec))
     writer.close()

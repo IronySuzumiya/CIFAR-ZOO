@@ -30,6 +30,12 @@ class ADMMLoss(nn.Module):
                 idx += 1
         return loss
 
+    def get_state(self):
+        return self.Z, self.U
+
+    def load_state(self, state):
+        self.Z, self.U = state
+
     def update_ADMM(self):
         self.update_X()
         self.update_Z()

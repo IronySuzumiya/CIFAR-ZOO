@@ -93,7 +93,7 @@ def save_checkpoint(state, is_best, filename):
         shutil.copyfile(filename + '.pth.tar', filename + '_best.pth.tar')
 
 
-def load_checkpoint(path, model, optimizer=None):
+def load_checkpoint(path, model, optimizer=None, admm_criterion=None):
     if os.path.isfile(path):
         logging.info("=== loading checkpoint '{}' ===".format(path))
 
@@ -104,6 +104,8 @@ def load_checkpoint(path, model, optimizer=None):
             best_prec = checkpoint['best_prec']
             last_epoch = checkpoint['last_epoch']
             optimizer.load_state_dict(checkpoint['optimizer'])
+            if admm_criterion:
+                admm_criterion.load_state(checkpoint['admm_state_dict'])
             logging.info("=== done. also loaded optimizer from " +
                          "checkpoint '{}' (epoch {}) ===".format(
                              path, last_epoch + 1))

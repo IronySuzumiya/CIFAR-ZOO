@@ -56,7 +56,7 @@ class ADMMLoss(nn.Module):
                 rram = z.view(z.shape[0], -1)
                 tmp = torch.zeros(((rram.shape[0] - 1) // self.ou_width + 1, (rram.shape[1] - 1) // self.ou_height + 1)).to(self.device)
                 admm_cuda_lib.struct_norm(rram, tmp, self.ou_width, self.ou_height)
-                pcen, _ = tmp.view(-1).kthvalue(round(self.percent[idx] * tmp.shape[0] * tmp.shape[1]))
+                pcen, _ = tmp.view(-1).kthvalue(round(self.percent[idx] * tmp.numel()))
                 upon_threshold = tmp >= pcen
                 res1 = rram.shape[0] % self.ou_width
                 res2 = rram.shape[1] % self.ou_height
@@ -67,7 +67,7 @@ class ADMMLoss(nn.Module):
                         else:
                             rram.data[i::self.ou_width, j::self.ou_height] *= upon_threshold[:-1, :] if j < res2 or res2 == 0 else upon_threshold[:-1, :-1]
             else:
-                pcen, _ = torch.kthvalue(abs(z.view(-1)), round(self.percent[idx] * z.view(-1).shape[0]))
+                pcen, _ = torch.kthvalue(abs(z.view(-1)), round(self.percent[idx] * z.numel()))
                 under_threshold = abs(z) < pcen
                 z.data[under_threshold] = 0
             self.Z += (z,)
@@ -102,7 +102,7 @@ class ADMMLoss(nn.Module):
                     rram_mask = mask.view(mask.shape[0], -1)
                     tmp = torch.zeros(((rram.shape[0] - 1) // self.ou_width + 1, (rram.shape[1] - 1) // self.ou_height + 1)).to(self.device)
                     admm_cuda_lib.struct_norm(rram, tmp, self.ou_width, self.ou_height)
-                    pcen, _ = tmp.view(-1).kthvalue(round(self.percent[idx] * tmp.shape[0] * tmp.shape[1]))
+                    pcen, _ = tmp.view(-1).kthvalue(round(self.percent[idx] * tmp.numel()))
                     upon_threshold = tmp >= pcen
                     res1 = rram.shape[0] % self.ou_width
                     res2 = rram.shape[1] % self.ou_height
@@ -113,7 +113,7 @@ class ADMMLoss(nn.Module):
                             else:
                                 rram_mask.data[i::self.ou_width, j::self.ou_height] = upon_threshold[:-1, :] if j < res2 or res2 == 0 else upon_threshold[:-1, :-1]
                 else:
-                    pcen, _ = torch.kthvalue(abs(weight.view(-1)), round(self.percent[idx] * weight.view(-1).shape[0]))
+                    pcen, _ = torch.kthvalue(abs(weight.view(-1)), round(self.percent[idx] * weight.numel()))
                     mask = (abs(weight) >= pcen).to(self.device)
                 param.data.mul_(mask)
                 dict_mask[name] = mask

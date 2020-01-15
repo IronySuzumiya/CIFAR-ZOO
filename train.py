@@ -173,7 +173,7 @@ def show_statistic_result(model):
 
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight":
-            rram_proj = param.view(param.shape[0], -1).T
+            rram_proj = param.detach().view(param.shape[0], -1).T
             i_len = (rram_proj.shape[0] - 1) // config.pruning.ou_height + 1
             j_len = (rram_proj.shape[1] - 1) // config.pruning.ou_width + 1
             n_i_block = (i_len - 1) // i_block_size + 1

@@ -96,6 +96,32 @@ def train(train_loader, net, criterion, optimizer, epoch, device):
     return train_loss, train_acc
 
 
+def test_(test_loader, net, criterion, device):
+    global writer
+
+    net.eval()
+
+    test_loss = 0
+    correct = 0
+    total = 0
+
+    logger.info(" === Validate ===")
+
+    with torch.no_grad():
+        for batch_index, (inputs, targets) in enumerate(test_loader):
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = net(inputs)
+            loss = criterion(outputs, targets)
+
+            test_loss += loss.item()
+            _, predicted = outputs.max(1)
+            total += targets.size(0)
+            correct += predicted.eq(targets).sum().item()
+
+    logger.info("   == test loss: {:.3f} | test acc: {:6.3f}%".format(
+        test_loss / (batch_index + 1), 100.0 * correct / total))
+
+
 def test(test_loader, net, criterion, optimizer, epoch, device):
     global writer
 
@@ -342,6 +368,8 @@ def main():
         if args.stat:
             logger.info("            =======  Showing Statistic Result  =======\n")
             show_statistic_result(net)
+            test_(test_loader, net, criterion, device)
+            logger.info("   == best test acc: {:.3f}%\n".format(best_prec))
         
     else:
         logger.info("            =======  Training  =======\n")

@@ -196,7 +196,8 @@ def show_statistic_result(model):
         try:
             ans.append(process_results[j].get())
         except:
-            traceback.print_exc(file=args.work_path + '/error.txt')
+            with open(args.work_path + '/error.txt', 'w') as error_file:
+                traceback.print_exc(file=error_file)
 
     logger.info("   == n_ou_with_nonzero: {}".format(n_ou_with_nonzero))
     logger.info("   == n_ou_with_positive: {}".format(n_ou_with_positive))

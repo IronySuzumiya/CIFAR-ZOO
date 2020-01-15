@@ -149,33 +149,41 @@ def update_dict(dict, n):
     else:
         dict[n] = 1
 
-def show_statistic_result_(rram_proj, i_beg, i_end, j_beg, j_end, n_ou_with_nonzero, n_ou_with_positive, n_ou_with_negative):
+def show_statistic_result_(rram_proj, i_beg, i_end, j_beg, j_end):
+    bad_count = 0
+
     for i in range(i_beg, i_end):
         for j in range(j_beg, j_end):
             ou = rram_proj[i * config.pruning.ou_height : (i + 1) * config.pruning.ou_height, j * config.pruning.ou_width : (j + 1) * config.pruning.ou_width]
-            update_dict(n_ou_with_nonzero, len(ou.nonzero()[0]))
-            update_dict(n_ou_with_positive, len((ou > 0).nonzero()[0]))
-            update_dict(n_ou_with_negative, len((ou < 0).nonzero()[0]))
+            ou_size = ou.shape[0] * ou.shape[1]
+            nonzero_percent = 100. * len(ou.nonzero()[0]) / ou_size
+            positive_percent = 100. * len((ou > 0).nonzero()[0]) / ou_size
+            positive_over_nonzero = 100. * positive_percent / nonzero_percent
+            if positive_over_nonzero < 80. and positive_over_nonzero > 20.:
+                bad_count += 1
+
+    return bad_count
 
 def show_statistic_result(model):
     global config
-
-    n_ou_with_nonzero = {}
-    n_ou_with_positive = {}
-    n_ou_with_negative = {}
 
     pool = mp.Pool(processes=16)
 
     process_results = []
 
-    i_block_size = 128
-    j_block_size = 128
+    n_ou_i = 0
+    n_ou_j = 0
+
+    i_block_size = config.pruning.ou_height * 64
+    j_block_size = config.pruning.ou_width * 64
 
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight":
             rram_proj = param.detach().cpu().view(param.shape[0], -1).numpy().T
             i_len = (rram_proj.shape[0] - 1) // config.pruning.ou_height + 1
             j_len = (rram_proj.shape[1] - 1) // config.pruning.ou_width + 1
+            n_ou_i += i_len
+            n_ou_j += j_len
             n_i_block = (i_len - 1) // i_block_size + 1
             n_j_block = (j_len - 1) // j_block_size + 1
             for i in range(n_i_block):
@@ -184,24 +192,25 @@ def show_statistic_result(model):
                         pool.apply_async(
                             show_statistic_result_, (rram_proj,
                             i * i_block_size, min((i + 1) * i_block_size, i_len),
-                            j * j_block_size, min((j + 1) * j_block_size, j_len),
-                            n_ou_with_nonzero, n_ou_with_positive, n_ou_with_negative))
+                            j * j_block_size, min((j + 1) * j_block_size, j_len)))
                     )
     pool.close()
     pool.join()
 
-    ans = []
+    bad_count = 0
         
     for j in range(len(process_results)):
         try:
-            ans.append(process_results[j].get())
+            bad_count += process_results[j].get()
         except:
             with open(args.work_path + '/error.txt', 'w') as error_file:
                 traceback.print_exc(file=error_file)
 
-    logger.info("   == n_ou_with_nonzero: {}".format(n_ou_with_nonzero))
-    logger.info("   == n_ou_with_positive: {}".format(n_ou_with_positive))
-    logger.info("   == n_ou_with_negative: {}".format(n_ou_with_negative))
+    n_ou = n_ou_i * n_ou_j
+    bad_percent = 100. * bad_count / n_ou
+
+    logger.info("   == bad_count: {}".format(bad_count))
+    logger.info("   == bad_percent: {}%".format(bad_percent))
 
 def main():
     global args, config, last_epoch, best_prec, writer

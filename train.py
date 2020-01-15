@@ -19,7 +19,7 @@ from utils import Logger, count_parameters, data_augmentation, \
 
 from admm import ADMMLoss
 
-import torch.multiprocessing as mp
+import multiprocessing as mp
 import traceback
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')

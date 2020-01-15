@@ -153,9 +153,9 @@ def show_statistic_result_(rram_proj, i_beg, i_end, j_beg, j_end, n_ou_with_nonz
     for i in range(i_beg, i_end):
         for j in range(j_beg, j_end):
             ou = rram_proj[i * config.pruning.ou_height : (i + 1) * config.pruning.ou_height, j * config.pruning.ou_width : (j + 1) * config.pruning.ou_width]
-            update_dict(n_ou_with_nonzero, ou.nonzero().shape[0])
-            update_dict(n_ou_with_positive, (ou > 0).nonzero().shape[0])
-            update_dict(n_ou_with_negative, (ou < 0).nonzero().shape[0])
+            update_dict(n_ou_with_nonzero, len(ou.nonzero()[0]))
+            update_dict(n_ou_with_positive, len((ou > 0).nonzero()[0]))
+            update_dict(n_ou_with_negative, len((ou < 0).nonzero()[0]))
 
 def show_statistic_result(model):
     global config

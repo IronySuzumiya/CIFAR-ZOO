@@ -197,8 +197,7 @@ def show_statistic_result(model):
 
     process_results = []
 
-    n_ou_i = 0
-    n_ou_j = 0
+    n_ou = 0
 
     i_block_size = config.pruning.ou_height * 64
     j_block_size = config.pruning.ou_width * 64
@@ -208,8 +207,7 @@ def show_statistic_result(model):
             rram_proj = param.detach().cpu().view(param.shape[0], -1).numpy().T
             i_len = (rram_proj.shape[0] - 1) // config.pruning.ou_height + 1
             j_len = (rram_proj.shape[1] - 1) // config.pruning.ou_width + 1
-            n_ou_i += i_len
-            n_ou_j += j_len
+            n_ou += i_len * j_len
             n_i_block = (i_len - 1) // i_block_size + 1
             n_j_block = (j_len - 1) // j_block_size + 1
             for i in range(n_i_block):
@@ -231,8 +229,7 @@ def show_statistic_result(model):
         except:
             with open(args.work_path + '/error.txt', 'w') as error_file:
                 traceback.print_exc(file=error_file)
-
-    n_ou = n_ou_i * n_ou_j
+                
     bad_percent = 100. * bad_count / n_ou
 
     logger.info("   == bad_count: {}".format(bad_count))

@@ -246,6 +246,8 @@ def main():
     config = EasyDict(config)
     logger.info(config)
 
+    print('hello')
+
     # define netowrk
     # only for temporary use. use 'get_model' instead if errors occur.
     net = get_model_quan(config)

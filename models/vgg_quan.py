@@ -1,6 +1,6 @@
 # -*-coding:utf-8-*-
 import torch.nn as nn
-from layer_quan import QConv2d, QLinear
+from models.layer_quan import QConv2d, QLinear
 
 __all__ = ['vgg11', 'vgg13', 'vgg16', 'vgg19']
 
@@ -46,7 +46,8 @@ class VGG(nn.Module):
                 m.bias.data.zero_()
             elif isinstance(m, QLinear):
                 m.weight.data.normal_(0, 0.01)
-                m.bias.data.zero_()
+                if m.bias is not None:
+                    m.bias.data.zero_()
 
 
 def make_layers(cfg, config, batch_norm=False):

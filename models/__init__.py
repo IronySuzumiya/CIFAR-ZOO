@@ -12,6 +12,12 @@ from .sknet import *
 from .genet import *
 from .cbam_resnext import *
 
+from .vgg_quan import *
+
 
 def get_model(config):
     return globals()[config.architecture](config.num_classes)
+
+# only for temporary use
+def get_model_quan(config):
+    return globals()[config.architecture](config)

@@ -247,7 +247,8 @@ def main():
     logger.info(config)
 
     # define netowrk
-    net = get_model(config)
+    # only for temporary use. use 'get_model' instead if errors occur.
+    net = get_model_quan(config)
     logger.info(net)
     logger.info(" == total parameters: " + str(count_parameters(net)))
 

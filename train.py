@@ -15,12 +15,14 @@ from models import *
 
 from utils import Logger, count_parameters, data_augmentation, \
     load_checkpoint, get_data_loader, mixup_data, mixup_criterion, \
-    save_checkpoint, adjust_learning_rate, get_current_lr
+    save_checkpoint, adjust_learning_rate, get_current_lr, adjust_grad_scale
 
 from admm import ADMMLoss
 
 import multiprocessing as mp
 import traceback
+
+from utee import wage_quantizer, wage_util
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
@@ -34,7 +36,7 @@ logger = Logger(log_file_name=args.work_path + '/log.txt',
                 log_level=logging.DEBUG, logger_name="CIFAR").get_log()
 
 
-def train(train_loader, net, criterion, optimizer, epoch, device):
+def train(train_loader, net, criterion, optimizer, epoch, device, grad_scale=-1):
     global writer
 
     start = time.time()
@@ -46,6 +48,9 @@ def train(train_loader, net, criterion, optimizer, epoch, device):
     logger.info(" === Epoch: [{}/{}] === ".format(epoch + 1, config.epochs))
 
     for batch_index, (inputs, targets) in enumerate(train_loader):
+        # zero the gradient buffers
+        optimizer.zero_grad()
+
         # move tensor to GPU
         inputs, targets = inputs.to(device), targets.to(device)
         if config.mixup:
@@ -58,13 +63,20 @@ def train(train_loader, net, criterion, optimizer, epoch, device):
         else:
             outputs = net(inputs)
             loss = criterion(outputs, targets)
-
-        # zero the gradient buffers
-        optimizer.zero_grad()
+        
         # backward
         loss.backward()
+
+        if 'quantization' in config:
+            for name, param in list(net.named_parameters())[::-1]:
+                param.grad.data = wage_quantizer.QG(param.grad.data, config.quantization.wl_grad, grad_scale)
+
         # update weight
         optimizer.step()
+
+        if 'quantization' in config:
+            for name, param in list(net.named_parameters())[::-1]:
+                param.data = wage_quantizer.C(param.data, config.quantization.wl_weight)
 
         # count the loss and acc
         train_loss += loss.item()
@@ -265,6 +277,7 @@ def main():
 
     # define loss and optimizer
     criterion = nn.CrossEntropyLoss()
+    #criterion = wage_util.SSE
     if 'pruning' in config:
         assert config.pruning.method == 'ADMM'
         assert config.epochs == config.pruning.pre_epochs + config.pruning.epochs + config.pruning.re_epochs
@@ -279,6 +292,13 @@ def main():
         momentum=config.optimize.momentum,
         weight_decay=config.optimize.weight_decay,
         nesterov=config.optimize.nesterov)
+
+    if 'quantization' in config:
+        assert config.quantization.method == 'WAGE'
+        grad_scale = config.quantization.base_grad_scale
+    else:
+        #place-holder
+        grad_scale = -1
 
     # resume from a checkpoint
     last_epoch = -1
@@ -309,8 +329,10 @@ def main():
             logger.info("            =======  Pre-Training  =======\n")
             for epoch in range(begin_epoch, config.pruning.pre_epochs):
                 lr = adjust_learning_rate(optimizer, epoch, config)
+                if 'quantization' in config:
+                    grad_scale = adjust_grad_scale(grad_scale, epoch, config)
                 writer.add_scalar('learning_rate', lr, epoch)
-                train(train_loader, net, criterion, optimizer, epoch, device)
+                train(train_loader, net, criterion, optimizer, epoch, device, grad_scale)
                 if epoch == 0 or (epoch + 1) % config.eval_freq == 0 or epoch == config.pruning.pre_epochs - 1:
                     _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
                     save_checkpoint_(net, test_acc * 100., epoch, optimizer, admm_criterion.get_state(), ckpt_name)
@@ -322,8 +344,10 @@ def main():
             logger.info("            =======  Training with ADMM Pruning  =======\n")
             for epoch in range(admm_begin_epoch, config.pruning.pre_epochs + config.pruning.epochs):
                 lr = adjust_learning_rate(optimizer, epoch, config)
+                if 'quantization' in config:
+                    grad_scale = adjust_grad_scale(grad_scale, epoch, config)
                 writer.add_scalar('learning_rate', lr, epoch)
-                train(train_loader, net, admm_criterion, optimizer, epoch, device)
+                train(train_loader, net, admm_criterion, optimizer, epoch, device, grad_scale)
                 logger.info("   ==  Updating ADMM State  ==")
                 admm_criterion.update_ADMM()
                 logger.info("   ==  Normalized norm of (weight - projection)  ==")
@@ -355,8 +379,10 @@ def main():
             logger.info("            =======  Re-Training  =======\n")
             for epoch in range(retrain_begin_epoch, config.epochs):
                 lr = adjust_learning_rate(optimizer, epoch, config)
+                if 'quantization' in config:
+                    grad_scale = adjust_grad_scale(grad_scale, epoch, config)
                 writer.add_scalar('learning_rate', lr, epoch)
-                train(train_loader, net, criterion, optimizer, epoch, device)
+                train(train_loader, net, criterion, optimizer, epoch, device, grad_scale)
                 if epoch == config.pruning.pre_epochs + config.pruning.epochs or \
                         (epoch + 1 - config.pruning.pre_epochs - config.pruning.epochs) % config.eval_freq == 0 or \
                         epoch == config.epochs - 1:
@@ -375,8 +401,10 @@ def main():
         logger.info("            =======  Training  =======\n")
         for epoch in range(last_epoch + 1, config.epochs):
             lr = adjust_learning_rate(optimizer, epoch, config)
+            if 'quantization' in config:
+                grad_scale = adjust_grad_scale(grad_scale, epoch, config)
             writer.add_scalar('learning_rate', lr, epoch)
-            train(train_loader, net, criterion, optimizer, epoch, device)
+            train(train_loader, net, criterion, optimizer, epoch, device, grad_scale)
             if epoch == 0 or (epoch + 1) % config.eval_freq == 0 or epoch == config.epochs - 1:
                 _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
                 save_checkpoint_(net, test_acc * 100., epoch, optimizer, None, ckpt_name)

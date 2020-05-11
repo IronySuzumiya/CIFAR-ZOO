@@ -22,7 +22,7 @@ from admm import ADMMLoss
 import multiprocessing as mp
 import traceback
 
-from optimizer import PruneAdam
+from optimizer import PruneSGD
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
@@ -284,19 +284,12 @@ def main():
     else:
         admm_criterion = None
 
-    '''optimizer = torch.optim.SGD(
+    optimizer = PruneSGD(
         net.parameters(),
         config.lr_scheduler.base_lr,
         momentum=config.optimize.momentum,
         weight_decay=config.optimize.weight_decay,
-        nesterov=config.optimize.nesterov)'''
-
-    retrain_optimizer = PruneAdam(
-        net.named_parameters(),
-        config.lr_scheduler.base_lr,
-        weight_decay=config.optimize.weight_decay)
-
-    optimizer = retrain_optimizer
+        nesterov=config.optimize.nesterov)
 
     # resume from a checkpoint
     last_epoch = -1
@@ -374,7 +367,7 @@ def main():
             for epoch in range(retrain_begin_epoch, config.epochs):
                 lr = adjust_learning_rate(optimizer, epoch, config)
                 writer.add_scalar('learning_rate', lr, epoch)
-                train(train_loader, net, criterion, retrain_optimizer, epoch, device, admm_criterion.get_mask())
+                train(train_loader, net, criterion, optimizer, epoch, device, admm_criterion.get_mask())
                 if epoch == config.pruning.pre_epochs + config.pruning.epochs or \
                         (epoch + 1 - config.pruning.pre_epochs - config.pruning.epochs) % config.eval_freq == 0 or \
                         epoch == config.epochs - 1:

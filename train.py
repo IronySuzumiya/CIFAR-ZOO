@@ -28,6 +28,8 @@ parser.add_argument('--resume', action='store_true',
                     help='resume from checkpoint')
 parser.add_argument('--stat', action='store_true',
                     help='show the statistic result of trained model')
+parser.add_argument('--distri', action='store_true',
+                    help='show the weight distribution of trained model')
 
 args = parser.parse_args()
 logger = Logger(log_file_name=args.work_path + '/log.txt',
@@ -235,6 +237,13 @@ def show_statistic_result(model):
     logger.info("   == bad_count: {}".format(bad_count))
     logger.info("   == bad_percent: {}%".format(bad_percent))
 
+def show_weight_distribution(model):
+    for name, param in model.named_parameters():
+        if name.split('.')[-1] == "weight":
+            rram_proj = param.detach().view(param.shape[0], -1).numpy().T
+            print(name)
+            print(rram_proj[:config.pruning.ou_height*4, :config.pruning.ou_width*4])
+
 def main():
     global args, config, last_epoch, best_prec, writer
     writer = SummaryWriter(log_dir=args.work_path + '/event')
@@ -246,7 +255,7 @@ def main():
     config = EasyDict(config)
     logger.info(config)
 
-    # define netowrk
+    # define network
     net = get_model(config)
     logger.info(net)
     logger.info(" == total parameters: " + str(count_parameters(net)))
@@ -365,6 +374,12 @@ def main():
         if args.stat:
             logger.info("            =======  Showing Statistic Result  =======\n")
             show_statistic_result(net)
+            test_(test_loader, net, criterion, device)
+            logger.info("   == best test acc: {:.3f}%\n".format(best_prec))
+
+        if args.distri:
+            logger.info("            =======  Showing Weight Distribution  =======\n")
+            show_weight_distribution(net)
             test_(test_loader, net, criterion, device)
             logger.info("   == best test acc: {:.3f}%\n".format(best_prec))
         

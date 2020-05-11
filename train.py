@@ -285,7 +285,7 @@ def main():
         admm_criterion = None
 
     optimizer = PruneSGD(
-        net.parameters(),
+        net.named_parameters(),
         config.lr_scheduler.base_lr,
         momentum=config.optimize.momentum,
         weight_decay=config.optimize.weight_decay,

@@ -14,6 +14,7 @@ class ADMMLoss(nn.Module):
         self.percent = percent
         self.Z = ()
         self.U = ()
+        self.dict_mask = {}
         for name, param in model.named_parameters():
             if name.split('.')[-1] == "weight":
                 self.Z += (param.detach().clone().to(device),)
@@ -31,10 +32,13 @@ class ADMMLoss(nn.Module):
         return loss
 
     def get_state(self):
-        return self.Z, self.U
+        return self.Z, self.U, self.dict_mask
 
     def load_state(self, state):
-        self.Z, self.U = state
+        self.Z, self.U, self.dict_mask = state
+
+    def get_mask(self):
+        return self.dict_mask
 
     def update_ADMM(self):
         self.update_X()
@@ -91,7 +95,7 @@ class ADMMLoss(nn.Module):
         return res_list
 
     def apply_pruning(self):
-        dict_mask = {}
+        self.dict_mask = {}
         idx = 0
         for name, param in self.model.named_parameters():
             if name.split('.')[-1] == "weight":
@@ -116,6 +120,5 @@ class ADMMLoss(nn.Module):
                     pcen, _ = torch.kthvalue(abs(weight.view(-1)), round(self.percent[idx] * weight.numel()))
                     mask = (abs(weight) >= pcen).to(self.device)
                 param.data.mul_(mask)
-                dict_mask[name] = mask
+                self.dict_mask[name] = mask
                 idx += 1
-        return dict_mask

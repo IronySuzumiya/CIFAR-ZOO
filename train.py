@@ -22,6 +22,8 @@ from admm import ADMMLoss
 import multiprocessing as mp
 import traceback
 
+from optimizer import PruneAdam
+
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
 parser.add_argument('--resume', action='store_true',
@@ -36,7 +38,7 @@ logger = Logger(log_file_name=args.work_path + '/log.txt',
                 log_level=logging.DEBUG, logger_name="CIFAR").get_log()
 
 
-def train(train_loader, net, criterion, optimizer, epoch, device):
+def train(train_loader, net, criterion, optimizer, epoch, device, mask=None):
     global writer
 
     start = time.time()
@@ -66,7 +68,10 @@ def train(train_loader, net, criterion, optimizer, epoch, device):
         # backward
         loss.backward()
         # update weight
-        optimizer.step()
+        if mask is None:
+            optimizer.step()
+        else:
+            optimizer.prune_step(mask)
 
         # count the loss and acc
         train_loss += loss.item()
@@ -286,6 +291,11 @@ def main():
         weight_decay=config.optimize.weight_decay,
         nesterov=config.optimize.nesterov)
 
+    retrain_optimizer = PruneAdam(
+        net.named_parameters(),
+        config.lr_scheduler.base_lr,
+        weight_decay=config.optimize.weight_decay)
+
     # resume from a checkpoint
     last_epoch = -1
     best_prec = 0
@@ -362,7 +372,7 @@ def main():
             for epoch in range(retrain_begin_epoch, config.epochs):
                 lr = adjust_learning_rate(optimizer, epoch, config)
                 writer.add_scalar('learning_rate', lr, epoch)
-                train(train_loader, net, criterion, optimizer, epoch, device)
+                train(train_loader, net, criterion, retrain_optimizer, epoch, device, admm_criterion.get_mask())
                 if epoch == config.pruning.pre_epochs + config.pruning.epochs or \
                         (epoch + 1 - config.pruning.pre_epochs - config.pruning.epochs) % config.eval_freq == 0 or \
                         epoch == config.epochs - 1:

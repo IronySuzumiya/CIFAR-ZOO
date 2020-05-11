@@ -284,17 +284,19 @@ def main():
     else:
         admm_criterion = None
 
-    optimizer = torch.optim.SGD(
+    '''optimizer = torch.optim.SGD(
         net.parameters(),
         config.lr_scheduler.base_lr,
         momentum=config.optimize.momentum,
         weight_decay=config.optimize.weight_decay,
-        nesterov=config.optimize.nesterov)
+        nesterov=config.optimize.nesterov)'''
 
     retrain_optimizer = PruneAdam(
         net.named_parameters(),
         config.lr_scheduler.base_lr,
         weight_decay=config.optimize.weight_decay)
+
+    optimizer = retrain_optimizer
 
     # resume from a checkpoint
     last_epoch = -1

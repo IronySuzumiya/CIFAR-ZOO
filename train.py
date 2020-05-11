@@ -240,7 +240,7 @@ def show_statistic_result(model):
 def show_weight_distribution(model):
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight":
-            rram_proj = param.detach().view(param.shape[0], -1).numpy().T
+            rram_proj = param.detach().view(param.shape[0], -1).T
             print(name)
             print(rram_proj[:config.pruning.ou_height*4, :config.pruning.ou_width*4])
 

@@ -32,15 +32,13 @@ parser.add_argument('--compress', action='store_true',
                     help='compress the trained model')
 parser.add_argument('--stat', action='store_true',
                     help='show the statistic result of the trained model')
-parser.add_argument('--quan', action='store_true',
-                    help='set those negligible weights to zero')
 
 args = parser.parse_args()
 logger = Logger(log_file_name=args.work_path + '/log.txt',
                 log_level=logging.DEBUG, logger_name="CIFAR").get_log()
 
 
-def train(train_loader, net, criterion, optimizer, epoch, device, mask=None):
+def train(train_loader, net, criterion, optimizer, epoch, device, mask=None, small_mask=None):
     global writer
 
     start = time.time()
@@ -73,7 +71,7 @@ def train(train_loader, net, criterion, optimizer, epoch, device, mask=None):
         if mask is None:
             optimizer.step()
         else:
-            optimizer.prune_step(mask)
+            optimizer.prune_step(mask, small_mask)
 
         # count the loss and acc
         train_loss += loss.item()
@@ -263,11 +261,6 @@ def show_compressed_weights(model, mask):
             print(ou_index[name])
             print(non_zero_weights[name])
 
-def quantize_weights(model):
-    for name, param in model.named_parameters():
-        if name.split('.')[-1] == "weight":
-            param[param < 1e-5] = 0
-
 def main():
     global args, config, last_epoch, best_prec, writer
     writer = SummaryWriter(log_dir=args.work_path + '/event')
@@ -386,7 +379,7 @@ def main():
             for epoch in range(retrain_begin_epoch, config.epochs):
                 lr = adjust_learning_rate(optimizer, epoch, config)
                 writer.add_scalar('learning_rate', lr, epoch)
-                train(train_loader, net, criterion, optimizer, epoch, device, admm_criterion.get_mask())
+                train(train_loader, net, criterion, optimizer, epoch, device, admm_criterion.get_mask(), admm_criterion.get_small_mask())
                 if epoch == config.pruning.pre_epochs + config.pruning.epochs or \
                         (epoch + 1 - config.pruning.pre_epochs - config.pruning.epochs) % config.eval_freq == 0 or \
                         epoch == config.epochs - 1:
@@ -394,12 +387,6 @@ def main():
                     save_checkpoint_(net, test_acc * 100., epoch, optimizer, admm_criterion.get_state(), ckpt_name)
             logger.info(
                 "======== Re-Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
-
-        if args.quan:
-            logger.info("            =======  Quantizing Weights  =======\n")
-            quantize_weights(net)
-            test_(test_loader, net, criterion, device)
-            logger.info("   == best test acc: {:.3f}%\n".format(best_prec))
 
         if args.stat:
             logger.info("            =======  Showing Statistic Result  =======\n")

@@ -459,7 +459,7 @@ class PruneSGD(NameOptimizer):
         return loss
 
     @torch.no_grad()
-    def prune_step(self, mask, closure=None):
+    def prune_step(self, mask, small_mask, closure=None):
         """Performs a single optimization step.
 
         Arguments:
@@ -496,6 +496,7 @@ class PruneSGD(NameOptimizer):
                         d_p = buf
 
                 if name.split('.')[-1] == "weight":
-                    p.add_(d_p.mul(mask[name]), alpha=-group['lr'])
+                    final_d = d_p.mul(mask[name]).mul(small_mask[name])
+                    p.add_(final_d, alpha=-group['lr'])
 
         return loss

@@ -15,6 +15,7 @@ class ADMMLoss(nn.Module):
         self.Z = ()
         self.U = ()
         self.dict_mask = {}
+        self.dict_small_mask = {}
         for name, param in model.named_parameters():
             if name.split('.')[-1] == "weight":
                 self.Z += (param.detach().clone().to(device),)
@@ -32,13 +33,16 @@ class ADMMLoss(nn.Module):
         return loss
 
     def get_state(self):
-        return self.Z, self.U, self.dict_mask
+        return self.Z, self.U, self.dict_mask, self.dict_small_mask
 
     def load_state(self, state):
-        self.Z, self.U, self.dict_mask = state
+        self.Z, self.U, self.dict_mask, self.dict_small_mask = state
 
     def get_mask(self):
         return self.dict_mask
+
+    def get_small_mask(self):
+        return self.dict_small_mask
 
     def update_ADMM(self):
         self.update_X()
@@ -96,6 +100,7 @@ class ADMMLoss(nn.Module):
 
     def apply_pruning(self):
         self.dict_mask = {}
+        self.dict_small_mask = {}
         idx = 0
         for name, param in self.model.named_parameters():
             if name.split('.')[-1] == "weight":
@@ -121,4 +126,8 @@ class ADMMLoss(nn.Module):
                     mask = (abs(weight) >= pcen).to(self.device)
                 param.data.mul_(mask)
                 self.dict_mask[name] = mask
+                small_mask = torch.zeros_like(weight, dtype=torch.bool).to(self.device)
+                small_mask = weight > 1e-5
+                param.data.mul_(small_mask)
+                self.dict_small_mask[name] = small_mask
                 idx += 1

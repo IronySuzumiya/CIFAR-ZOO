@@ -255,7 +255,7 @@ def show_compressed_weights(model, mask):
             n_ou_cols[name] = (rram_mask.shape[1] - 1) // ou_width + 1
             ou_index[name] = []
             non_zero_weights[name] = []
-            for i in n_ou_cols[name]:
+            for i in range(n_ou_cols[name]):
                 ou_index[name].append(rram_mask[::ou_height, i * ou_width].nonzero().flatten())
                 non_zero_weights[name].append(rram_proj[rram_mask[:, i * ou_width].nonzero().flatten(), i * ou_width : (i + 1) * ou_width])
             print(ou_index[name])

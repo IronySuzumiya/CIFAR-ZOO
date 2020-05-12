@@ -28,10 +28,10 @@ parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
 parser.add_argument('--resume', action='store_true',
                     help='resume from checkpoint')
+parser.add_argument('--compress', action='store_true',
+                    help='compress the trained model')
 parser.add_argument('--stat', action='store_true',
-                    help='show the statistic result of trained model')
-parser.add_argument('--distri', action='store_true',
-                    help='show the weight distribution of trained model')
+                    help='show the statistic result of the trained model')
 
 args = parser.parse_args()
 logger = Logger(log_file_name=args.work_path + '/log.txt',
@@ -242,12 +242,24 @@ def show_statistic_result(model):
     logger.info("   == bad_count: {}".format(bad_count))
     logger.info("   == bad_percent: {}%".format(bad_percent))
 
-def show_weight_distribution(model):
+def show_compressed_weights(model, mask):
+    ou_width = config.pruning.ou_width
+    ou_height = config.pruning.ou_height
+    ou_index = {}
+    non_zero_weights = {}
+    n_ou_cols = {}
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight":
             rram_proj = param.detach().view(param.shape[0], -1).T
-            print(name)
-            print(rram_proj[:config.pruning.ou_height*4, :config.pruning.ou_width*4])
+            rram_mask = mask[name].view(mask.shape[0], -1).T
+            n_ou_cols[name] = (rram_mask.shape[1] - 1) // ou_width + 1
+            ou_index[name] = []
+            non_zero_weights[name] = []
+            for i in n_ou_cols[name]:
+                ou_index[name].append(rram_mask[::ou_height, i * ou_width].nonzero().flatten())
+                non_zero_weights[name].append(rram_proj[rram_mask[:, i * ou_width].nonzero().flatten(), i * ou_width : (i + 1) * ou_width])
+            print(ou_index[name])
+            print(non_zero_weights[name])
 
 def main():
     global args, config, last_epoch, best_prec, writer
@@ -382,9 +394,9 @@ def main():
             test_(test_loader, net, criterion, device)
             logger.info("   == best test acc: {:.3f}%\n".format(best_prec))
 
-        if args.distri:
-            logger.info("            =======  Showing Weight Distribution  =======\n")
-            show_weight_distribution(net)
+        if args.compress:
+            logger.info("            =======  Showing Compressed Weights  =======\n")
+            show_compressed_weights(net, admm_criterion.get_mask())
             test_(test_loader, net, criterion, device)
             logger.info("   == best test acc: {:.3f}%\n".format(best_prec))
         

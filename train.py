@@ -38,7 +38,7 @@ logger = Logger(log_file_name=args.work_path + '/log.txt',
                 log_level=logging.DEBUG, logger_name="CIFAR").get_log()
 
 
-def train(train_loader, net, criterion, optimizer, epoch, device, mask=None, small_mask=None):
+def train(train_loader, net, criterion, optimizer, epoch, device, mask=None):
     global writer
 
     start = time.time()
@@ -68,10 +68,10 @@ def train(train_loader, net, criterion, optimizer, epoch, device, mask=None, sma
         # backward
         loss.backward()
         # update weight
-        if mask is None:
-            optimizer.step()
+        if mask:
+            optimizer.prune_step(mask)
         else:
-            optimizer.prune_step(mask, small_mask)
+            optimizer.step()
 
         # count the loss and acc
         train_loss += loss.item()
@@ -245,7 +245,7 @@ def show_statistic_result(model):
 def show_compressed_weights(model, mask):
     ou_width = config.pruning.ou_width
     ou_height = config.pruning.ou_height
-    ou_index = {}
+    row_index = {}
     non_zero_weights = {}
     n_ou_cols = {}
     for name, param in model.named_parameters():
@@ -253,13 +253,21 @@ def show_compressed_weights(model, mask):
             rram_proj = param.detach().view(param.shape[0], -1).T
             rram_mask = mask[name].view(mask[name].shape[0], -1).T
             n_ou_cols[name] = (rram_mask.shape[1] - 1) // ou_width + 1
-            ou_index[name] = []
+            row_index[name] = []
             non_zero_weights[name] = []
             for i in range(n_ou_cols[name]):
-                ou_index[name].append(rram_mask[::ou_height, i * ou_width].nonzero().flatten())
-                non_zero_weights[name].append(rram_proj[rram_mask[:, i * ou_width].nonzero().flatten(), i * ou_width : (i + 1) * ou_width])
-            print(ou_index[name])
-            print(non_zero_weights[name])
+                non_zero_ou_index = rram_mask[:, i * ou_width].nonzero().flatten()
+                non_zero_ou = rram_proj[non_zero_ou_index, i * ou_width : (i + 1) * ou_width]
+                non_zero_row_index = []
+                for i in range(non_zero_ou.shape[0]):
+                    if non_zero_ou[i, :].nonzero().numel() > 0:
+                        non_zero_row_index.append(i)
+                row_index[name].append(non_zero_ou_index[non_zero_row_index])
+                non_zero_weights[name].append(non_zero_ou[non_zero_row_index, :])
+
+            logger.info(name)
+            logger.info("   == row_index: {}".format(row_index[name]))
+            logger.info("   == non_zero_weights: {}".format(non_zero_weights[name]))
 
 def main():
     global args, config, last_epoch, best_prec, writer
@@ -379,7 +387,7 @@ def main():
             for epoch in range(retrain_begin_epoch, config.epochs):
                 lr = adjust_learning_rate(optimizer, epoch, config)
                 writer.add_scalar('learning_rate', lr, epoch)
-                train(train_loader, net, criterion, optimizer, epoch, device, admm_criterion.get_mask(), admm_criterion.get_small_mask())
+                train(train_loader, net, criterion, optimizer, epoch, device, admm_criterion.get_mask() & admm_criterion.get_small_mask())
                 if epoch == config.pruning.pre_epochs + config.pruning.epochs or \
                         (epoch + 1 - config.pruning.pre_epochs - config.pruning.epochs) % config.eval_freq == 0 or \
                         epoch == config.epochs - 1:

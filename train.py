@@ -251,7 +251,7 @@ def show_compressed_weights(model, mask):
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight":
             rram_proj = param.detach().view(param.shape[0], -1).T
-            rram_mask = mask[name].view(mask.shape[0], -1).T
+            rram_mask = mask[name].view(mask[name].shape[0], -1).T
             n_ou_cols[name] = (rram_mask.shape[1] - 1) // ou_width + 1
             ou_index[name] = []
             non_zero_weights[name] = []

@@ -80,7 +80,7 @@ def main():
     logger.info(config)
 
     # define network
-    net = get_model_pytorx(config)
+    net = get_model(config)
     logger.info(net)
     logger.info(" == total parameters: " + str(count_parameters(net)))
 

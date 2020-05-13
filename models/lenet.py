@@ -27,5 +27,5 @@ class LeNet(nn.Module):
         return out
 
 
-def lenet(num_classes):
-    return LeNet(num_classes=num_classes)
+def lenet(config):
+    return LeNet(num_classes=config.num_classes)

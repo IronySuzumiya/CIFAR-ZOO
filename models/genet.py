@@ -190,17 +190,17 @@ class GeResNeXt(nn.Module):
         return self.fc(x)
 
 
-def ge_resnext29_8x64d(num_classes):
+def ge_resnext29_8x64d(config):
     return GeResNeXt(
         cardinality=8,
         depth=29,
-        num_classes=num_classes,
+        num_classes=config.num_classes,
         base_width=64)
 
 
-def ge_resnext29_16x64d(num_classes):
+def ge_resnext29_16x64d(config):
     return GeResNeXt(
         cardinality=16,
         depth=29,
-        num_classes=num_classes,
+        num_classes=config.num_classes,
         base_width=64)

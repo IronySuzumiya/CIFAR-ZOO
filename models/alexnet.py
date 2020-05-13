@@ -35,8 +35,8 @@ class AlexNet(nn.Module):
         return x
 
 
-def alexnet(num_classes):
-    return AlexNet(num_classes=num_classes)
+def alexnet(config):
+    return AlexNet(num_classes=config.num_classes)
 
 
 class AlexNetPytorx(nn.Module):

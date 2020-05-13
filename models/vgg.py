@@ -58,17 +58,17 @@ def make_layers(cfg, batch_norm=False):
     return nn.Sequential(*layers)
 
 
-def vgg11(num_classes):
-    return VGG(make_layers(cfg['A'], batch_norm=True), num_classes)
+def vgg11(config):
+    return VGG(make_layers(cfg['A'], batch_norm=True), config.num_classes)
 
 
-def vgg13(num_classes):
-    return VGG(make_layers(cfg['B'], batch_norm=True), num_classes)
+def vgg13(config):
+    return VGG(make_layers(cfg['B'], batch_norm=True), config.num_classes)
 
 
-def vgg16(num_classes):
-    return VGG(make_layers(cfg['D'], batch_norm=True), num_classes)
+def vgg16(config):
+    return VGG(make_layers(cfg['D'], batch_norm=True), config.num_classes)
 
 
-def vgg19(num_classes):
-    return VGG(make_layers(cfg['E'], batch_norm=True), num_classes)
+def vgg19(config):
+    return VGG(make_layers(cfg['E'], batch_norm=True), config.num_classes)

@@ -257,14 +257,15 @@ def show_compressed_weights(model, mask, device):
     n_ou_cols = {}
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight":
-            rram_proj = param.detach().view(param.shape[0], -1).T
+            weight = quantize_weights(param.detach().data)
+            rram_proj = weight.view(param.shape[0], -1).T
             rram_mask = mask[name].view(mask[name].shape[0], -1).T
             n_ou_cols[name] = (rram_mask.shape[1] - 1) // ou_width + 1
             row_index[name] = []
             non_zero_weights[name] = []
             for i in range(n_ou_cols[name]):
                 non_zero_ou_index = rram_mask[:, i * ou_width].nonzero().flatten()
-                non_zero_ou = quantize_weights(rram_proj[non_zero_ou_index, i * ou_width : (i + 1) * ou_width])
+                non_zero_ou = rram_proj[non_zero_ou_index, i * ou_width : (i + 1) * ou_width]
                 non_zero_row_index = []
                 for i in range(non_zero_ou.shape[0]):
                     if non_zero_ou[i, :].nonzero().numel() > 0:
@@ -310,7 +311,7 @@ def main():
             config.pruning.ou_height, config.pruning.ou_width, config.pruning.percent)
     else:
         admm_criterion = None
-
+    
     optimizer = PruneSGD(
         net.named_parameters(),
         config.lr_scheduler.base_lr,

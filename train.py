@@ -289,7 +289,7 @@ def main():
     logger.info(config)
 
     # define network
-    net = get_model(config)
+    net = get_model_pytorx(config)
     logger.info(net)
     logger.info(" == total parameters: " + str(count_parameters(net)))
 
@@ -322,7 +322,7 @@ def main():
     # resume from a checkpoint
     last_epoch = -1
     best_prec = 0
-    
+
     if 'pruning' in config:
         ckpt_name = "{}_{}x{}".format(config.ckpt_name, config.pruning.ou_height, config.pruning.ou_width)
     else:

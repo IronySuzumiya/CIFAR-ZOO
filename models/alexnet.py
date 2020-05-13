@@ -77,7 +77,7 @@ class AlexNetPytorx(nn.Module):
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
         )
-        self.fc = crxb_Linear(50, config.num_classes, crxb_size=crxb_size, scaler_dw=config.scaler_dw,
+        self.fc = crxb_Linear(50, config.num_classes, crxb_size=config.crxb_size, scaler_dw=config.scaler_dw,
                                 gwire=config.gwire, gload=config.gload, gmax=config.gmax, gmin=config.gmin, vdd=config.vdd, freq=config.freq, temp=config.temp,
                                 enable_SAF=config.enable_SAF, enable_ec_SAF=config.enable_ec_SAF,
                                 enable_noise=config.enable_noise, ir_drop=config.ir_drop)

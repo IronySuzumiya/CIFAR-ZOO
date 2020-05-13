@@ -15,3 +15,6 @@ from .cbam_resnext import *
 
 def get_model(config):
     return globals()[config.architecture](config.num_classes)
+
+def get_model_pytorx(config):
+    return globals()[config.architecture](config)

@@ -1,0 +1,30 @@
+# net architecture
+architecture: alexnet_pytorx
+
+# log and checkpoint
+data_path: ./data
+ckpt_path: ./
+ckpt_name: alexnet
+
+# datasets
+num_classes: 10
+dataset: cifar10 
+
+# training parameters
+use_gpu: True
+input_size: 32
+batch_size: 128
+test_batch: 200
+eval_freq: 2
+workers: 4
+
+augmentation:
+  normalize: True
+  random_crop: True
+  random_horizontal_filp: True
+  cutout: False
+  holes: 1
+  length: 8
+
+ou_height: 4
+ou_width: 4

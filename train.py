@@ -322,15 +322,15 @@ def main():
     # resume from a checkpoint
     last_epoch = -1
     best_prec = 0
-    if args.work_path:
-        if 'pruning' in config:
-            ckpt_name = "{}_{}x{}".format(config.ckpt_name, config.pruning.ou_height, config.pruning.ou_width)
-        else:
-            ckpt_name = config.ckpt_name
-        ckpt_file_name = args.work_path + '/' + ckpt_name + '.pth.tar'
-        if args.resume:
-            best_prec, last_epoch = load_checkpoint(
-                ckpt_file_name, net, optimizer=optimizer, admm_criterion=admm_criterion)
+    
+    if 'pruning' in config:
+        ckpt_name = "{}_{}x{}".format(config.ckpt_name, config.pruning.ou_height, config.pruning.ou_width)
+    else:
+        ckpt_name = config.ckpt_name
+    ckpt_file_name = args.work_path + '/' + ckpt_name + '.pth.tar'
+    if args.resume:
+        best_prec, last_epoch = load_checkpoint(
+            ckpt_file_name, net, optimizer=optimizer, admm_criterion=admm_criterion)
 
     # load training data, do data augmentation and get data loader
     transform_train = transforms.Compose(

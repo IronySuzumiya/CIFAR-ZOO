@@ -1,5 +1,5 @@
 # net architecture
-architecture: alexnet
+architecture: alexnet_pytorx
 
 # log and checkpoint
 data_path: ./data

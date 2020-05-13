@@ -394,7 +394,7 @@ def main():
             for epoch in range(retrain_begin_epoch, config.epochs):
                 lr = adjust_learning_rate(optimizer, epoch, config)
                 writer.add_scalar('learning_rate', lr, epoch)
-                train(train_loader, net, criterion, optimizer, epoch, device, admm_criterion.get_mask() & admm_criterion.get_small_mask())
+                train(train_loader, net, criterion, optimizer, epoch, device, admm_criterion.get_mask())
                 if epoch == config.pruning.pre_epochs + config.pruning.epochs or \
                         (epoch + 1 - config.pruning.pre_epochs - config.pruning.epochs) % config.eval_freq == 0 or \
                         epoch == config.epochs - 1:

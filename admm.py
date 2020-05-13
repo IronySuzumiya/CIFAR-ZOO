@@ -126,8 +126,10 @@ class ADMMLoss(nn.Module):
                     mask = (abs(weight) >= pcen).to(self.device)
                 param.data.mul_(mask)
                 self.dict_mask[name] = mask
+                '''
                 small_mask = torch.zeros_like(weight, dtype=torch.bool).to(self.device)
                 small_mask = weight > 1e-5
                 param.data.mul_(small_mask)
                 self.dict_small_mask[name] = small_mask
+                '''
                 idx += 1

@@ -28,10 +28,10 @@ parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
 parser.add_argument('--resume', action='store_true',
                     help='resume from checkpoint')
+parser.add_argument('--bitsW', type=int, default=8, metavar='b',
+                    help='weight bits (default: 8)')
 parser.add_argument('--compress', action='store_true',
                     help='compress the trained model')
-parser.add_argument('--stat', action='store_true',
-                    help='show the statistic result of the trained model')
 
 args = parser.parse_args()
 logger = Logger(log_file_name=args.work_path + '/log.txt',
@@ -242,7 +242,14 @@ def show_statistic_result(model):
     logger.info("   == bad_count: {}".format(bad_count))
     logger.info("   == bad_percent: {}%".format(bad_percent))
 
-def show_compressed_weights(model, mask):
+def quantize_weights(weight):
+    global args
+
+    h_lvl = 2 ** (args.bitsW - 1) - 1
+    delta_w = weight.abs().max() / h_lvl
+    return torch.round(weight / delta_w)
+
+def show_compressed_weights(model, mask, device):
     ou_width = config.pruning.ou_width
     ou_height = config.pruning.ou_height
     row_index = {}
@@ -257,7 +264,7 @@ def show_compressed_weights(model, mask):
             non_zero_weights[name] = []
             for i in range(n_ou_cols[name]):
                 non_zero_ou_index = rram_mask[:, i * ou_width].nonzero().flatten()
-                non_zero_ou = rram_proj[non_zero_ou_index, i * ou_width : (i + 1) * ou_width]
+                non_zero_ou = quantize_weights(rram_proj[non_zero_ou_index, i * ou_width : (i + 1) * ou_width])
                 non_zero_row_index = []
                 for i in range(non_zero_ou.shape[0]):
                     if non_zero_ou[i, :].nonzero().numel() > 0:
@@ -396,17 +403,9 @@ def main():
             logger.info(
                 "======== Re-Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
-        if args.stat:
-            logger.info("            =======  Showing Statistic Result  =======\n")
-            show_statistic_result(net)
-            test_(test_loader, net, criterion, device)
-            logger.info("   == best test acc: {:.3f}%\n".format(best_prec))
-
         if args.compress:
             logger.info("            =======  Showing Compressed Weights  =======\n")
-            show_compressed_weights(net, admm_criterion.get_mask())
-            test_(test_loader, net, criterion, device)
-            logger.info("   == best test acc: {:.3f}%\n".format(best_prec))
+            show_compressed_weights(net, admm_criterion.get_mask(), device)
         
     else:
         logger.info("            =======  Training  =======\n")

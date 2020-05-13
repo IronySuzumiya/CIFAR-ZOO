@@ -28,3 +28,17 @@ augmentation:
 
 ou_height: 4
 ou_width: 4
+
+crxb_size: 64
+vdd: 3.3
+gwire: 0.375
+gload: 0.25
+gmax: 0.000333
+gmin: 0.0000000333
+freq: 10e6
+temp: 300
+scaler_dw: 1.0
+enable_SAF: False
+enable_ec_SAF: False
+enable_noise: False
+ir_drop: False

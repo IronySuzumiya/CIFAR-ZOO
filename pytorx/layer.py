@@ -107,7 +107,7 @@ class crxb_Conv2d(nn.Conv2d):
         num_padding = crxb_index * target - source
         return crxb_index, num_padding
 
-    def forward(self, input):
+    def forward_crxb(self, input):
         # 1. input data and weight quantization
         with torch.no_grad():
             self.delta_w = self.weight.abs().max() / self.h_lvl * self.scaler_dw
@@ -241,6 +241,12 @@ class crxb_Conv2d(nn.Conv2d):
 
         return output
 
+    def forward(self, input):
+        if self.training:
+            return super(crxb_Conv2d, self).forward(input)
+        else:
+            return self.forward_crxb(input)
+
     def _reset_delta(self):
         self.delta_in_sum.data[0] = 0
         self.delta_out_sum.data[0] = 0
@@ -334,7 +340,7 @@ class crxb_Linear(nn.Linear):
         num_padding = crxb_index * target - source
         return crxb_index, num_padding
 
-    def forward(self, input):
+    def forward_crxb(self, input):
         # 1. input data and weight quantization
         with torch.no_grad():
             self.delta_w = self.weight.abs().max() / self.h_lvl * self.scaler_dw
@@ -459,6 +465,12 @@ class crxb_Linear(nn.Linear):
             output += self.bias
 
         return output
+
+    def forward(self, input):
+        if self.training:
+            return super(crxb_Linear, self).forward(input)
+        else:
+            return self.forward_crxb(input)
 
     def _reset_delta(self):
         self.delta_in_sum.data[0] = 0

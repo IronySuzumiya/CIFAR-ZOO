@@ -266,12 +266,14 @@ def show_compressed_weights(model, mask, device):
             for i in range(n_ou_cols[name]):
                 non_zero_ou_index = rram_mask[:, i * ou_width].nonzero().flatten()
                 non_zero_ou = rram_proj[non_zero_ou_index, i * ou_width : (i + 1) * ou_width]
-                non_zero_row_index = []
-                for i in range(non_zero_ou.shape[0]):
-                    if non_zero_ou[i, :].nonzero().numel() > 0:
-                        non_zero_row_index.append(i)
-                row_index[name].append(non_zero_ou_index[non_zero_row_index])
-                non_zero_weights[name].append(non_zero_ou[non_zero_row_index, :])
+                #non_zero_row_index = []
+                #for i in range(non_zero_ou.shape[0]):
+                #    if non_zero_ou[i, :].nonzero().numel() > 0:
+                #        non_zero_row_index.append(i)
+                #row_index[name].append(non_zero_ou_index[non_zero_row_index])
+                #non_zero_weights[name].append(non_zero_ou[non_zero_row_index, :])
+                row_index[name].append(non_zero_ou_index)
+                non_zero_weights[name].append(non_zero_ou)
 
             logger.info(name)
             logger.info("   == row_index: {}".format(row_index[name]))

@@ -121,6 +121,11 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-/data
+
+
+data/
 .vscode
 *ckpt*
+event/
+*.pth.tar
+log.txt

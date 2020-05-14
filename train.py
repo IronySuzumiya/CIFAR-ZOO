@@ -24,6 +24,9 @@ import traceback
 
 from optimizer import PruneSGD
 
+import numpy as np
+import random
+
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
 parser.add_argument('--resume', action='store_true',
@@ -279,6 +282,14 @@ def show_compressed_weights(model, mask, device):
             logger.info("   == row_index: {}".format(row_index[name]))
             logger.info("   == non_zero_weights: {}".format(non_zero_weights[name]))
 
+def setup_seed(seed):
+   torch.manual_seed(seed)
+   torch.cuda.manual_seed_all(seed)
+   torch.cuda.manual_seed(seed)
+   np.random.seed(seed)
+   random.seed(seed)
+   cudnn.deterministic = True
+
 def main():
     global args, config, last_epoch, best_prec, writer
     writer = SummaryWriter(log_dir=args.work_path + '/event')
@@ -289,6 +300,8 @@ def main():
     # convert to dict
     config = EasyDict(config)
     logger.info(config)
+
+    setup_seed(20)
 
     # define network
     net = get_model(config)

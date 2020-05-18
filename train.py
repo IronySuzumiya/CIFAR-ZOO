@@ -31,6 +31,8 @@ parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
 parser.add_argument('--restart', action='store_true',
                     help='start from scratch')
+parser.add_argument('--show-fkw', action='store_true',
+                    help='show fkw')
 parser.add_argument('--bitsW', type=int, default=8, metavar='b',
                     help='weight bits (default: 8)')
 parser.add_argument('--compress', action='store_true',
@@ -425,6 +427,16 @@ def main():
         if args.compress:
             logger.info("            =======  Showing Compressed Weights  =======\n")
             show_compressed_weights(net, admm_criterion.get_mask(), device)
+
+        if args.show_fkw:
+            logger.info("            =======  Showing FKW  =======\n")
+            idx = 0
+            fkw = admm_criterion.get_fkw()
+            for name, param in net.named_parameters():
+                if name.split('.')[-1] == "weight" and len(param.shape) == 4:
+                    logger.info(name)
+                    logger.info(fkw[idx])
+                    idx += 1
         
     else:
         logger.info("            =======  Training  =======\n")

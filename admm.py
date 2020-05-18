@@ -42,6 +42,9 @@ class ADMMLoss(nn.Module):
     def get_mask(self):
         return self.dict_mask
 
+    def get_fkw(self):
+        return self.fkw
+
     def calc_natural_patterns(self, size_pattern, percent, num_patterns):
         if not self.patterns:
             pattern_list = []

@@ -435,7 +435,7 @@ def main():
             for name, param in net.named_parameters():
                 if name.split('.')[-1] == "weight" and len(param.shape) == 4:
                     logger.info(name)
-                    logger.info(fkw[idx])
+                    logger.info(list(fkw[idx]))
                     idx += 1
         
     else:

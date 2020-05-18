@@ -429,13 +429,13 @@ def main():
             show_compressed_weights(net, admm_criterion.get_mask(), device)
 
         if args.show_fkw:
-            logger.info("            =======  Showing FKW  =======\n")
+            logger.info("            =======  Showing Number of Same Connectivity Patterns Each Layer  =======\n")
             idx = 0
-            fkw = admm_criterion.get_fkw()
+            res = admm_criterion.calc_num_same_connectivity_patterns()
             for name, param in net.named_parameters():
                 if name.split('.')[-1] == "weight" and len(param.shape) == 4:
                     logger.info(name)
-                    logger.info(list(fkw[idx]))
+                    logger.info(res[idx])
                     idx += 1
         
     else:

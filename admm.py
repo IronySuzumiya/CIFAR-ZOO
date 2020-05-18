@@ -45,6 +45,12 @@ class ADMMLoss(nn.Module):
     def get_fkw(self):
         return self.fkw
 
+    def calc_num_same_connectivity_patterns(self):
+        res = []
+        for i in range(len(self.fkw)):
+            res.append(Counter(list(map(lambda x: tuple(map(lambda y: y[0], x)), self.fkw[i]))).items())
+        return res
+
     def calc_natural_patterns(self, size_pattern, percent, num_patterns):
         if not self.patterns:
             pattern_list = []
@@ -122,6 +128,7 @@ class ADMMLoss(nn.Module):
             self.fkw = []
             idx = 0
             num_patterns = len(self.patterns)
+
             for name, param in self.model.named_parameters():
                 if name.split('.')[-1] == "weight" and len(param.shape) == 4:
                     weight = param.detach()
@@ -143,4 +150,9 @@ class ADMMLoss(nn.Module):
                     param.data.mul_(mask)
                     self.dict_mask[name] = mask
                     idx += 1
-                    self.fkw.append(zip(topk_indices.tolist(), best_patterns.tolist()))
+                    self.fkw.append([])
+                    fkw = list(zip(topk_indices.tolist(), best_patterns.tolist()))
+                    fkw = list(map(lambda x: (x[0] // param.shape[1], x[0] % param.shape[1], x[1]), fkw))
+                    for i in range(param.shape[0]):
+                        tmp = list(filter(lambda x: x[0] == i, fkw))
+                        self.fkw[-1].append(list(map(lambda x: (x[1], x[2]), tmp)))

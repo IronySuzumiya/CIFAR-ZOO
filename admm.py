@@ -44,8 +44,6 @@ class ADMMLoss(nn.Module):
 
     def calc_natural_patterns(self, size_pattern, percent, num_patterns):
         if not self.patterns:
-            self.size_pattern = size_pattern
-            self.num_patterns = num_patterns
             pattern_list = []
             idx = 0
             for name, param in self.model.named_parameters():
@@ -81,6 +79,7 @@ class ADMMLoss(nn.Module):
     def update_Z(self):
         self.Z = ()
         idx = 0
+        num_patterns = len(self.patterns)
         for x, u in zip(self.X, self.U):
             z = x + u
             z_flatten = z.view(-1, z.shape[2] ** 2)
@@ -88,8 +87,8 @@ class ADMMLoss(nn.Module):
             _, topk_indices = norm_values.topk(round((1 - self.percent[idx]) * norm_values.numel()))
             z_flatten[list(set(range(z_flatten.shape[0])) - set(topk_indices.tolist())), :] = 0
             z_flatten_topk = z_flatten[topk_indices, :]
-            pattern_compat = torch.zeros(topk_indices.numel(), self.num_patterns).type_as(z).to(self.device)
-            for i in range(self.num_patterns):
+            pattern_compat = torch.zeros(topk_indices.numel(), num_patterns).type_as(z).to(self.device)
+            for i in range(num_patterns):
                 pattern_compat[:, i] = z_flatten_topk[:, self.patterns[i]].norm(dim=1)
             best_patterns = pattern_compat.argmax(1)
             for i in range(best_patterns.numel()):
@@ -119,6 +118,7 @@ class ADMMLoss(nn.Module):
             self.dict_mask = {}
             self.fkw = []
             idx = 0
+            num_patterns = len(self.patterns)
             for name, param in self.model.named_parameters():
                 if name.split('.')[-1] == "weight" and len(param.shape) == 4:
                     weight = param.detach()
@@ -131,8 +131,8 @@ class ADMMLoss(nn.Module):
                     mask_flatten[list(set(range(mask_flatten.shape[0])) - set(topk_indices.tolist())), :] = 0
                     weight_flatten_topk = weight_flatten[topk_indices, :]
                     mask_flatten_topk = mask_flatten[topk_indices, :]
-                    pattern_compat = torch.zeros(topk_indices.numel(), self.num_patterns).type_as(weight).to(self.device)
-                    for i in range(self.num_patterns):
+                    pattern_compat = torch.zeros(topk_indices.numel(), num_patterns).type_as(weight).to(self.device)
+                    for i in range(num_patterns):
                         pattern_compat[:, i] = weight_flatten_topk[:, self.patterns[i]].norm(dim=1)
                     best_patterns = pattern_compat.argmax(1)
                     for i in range(best_patterns.numel()):

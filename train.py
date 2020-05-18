@@ -394,11 +394,12 @@ def main():
             logger.info(
                 "======== Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
+        if begin_epoch < config.epochs:
             logger.info("            =======  Applying ADMM Pruning  =======")
             admm_criterion.apply_pruning()
             prune_param, total_param = 0, 0
             for name, param in net.named_parameters():
-                if name.split('.')[-1] == "weight":
+                if name.split('.')[-1] == "weight" and len(param.shape) == 4:
                     logger.info("   ==  [at weight {}]  ==".format(name))
                     logger.info("   ==  percentage of pruned: {:.4f}%  ==".format(100 * (abs(param) == 0).sum().item() / param.numel()))
                     logger.info("   ==  nonzero parameters after pruning: {} / {}  ==".format((param != 0).sum().item(), param.numel()))
@@ -407,7 +408,6 @@ def main():
             logger.info("   ==  Total nonzero parameters after pruning: {} / {} ({:.4f}%)  ==\n".
                 format(prune_param, total_param, 100 * (total_param - prune_param) / total_param))
 
-        if begin_epoch < config.epochs:
             retrain_begin_epoch = max(begin_epoch, config.pruning.pre_epochs + config.pruning.epochs)
             logger.info("            =======  Re-Training  =======\n")
             for epoch in range(retrain_begin_epoch, config.epochs):

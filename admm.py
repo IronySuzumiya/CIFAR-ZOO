@@ -15,6 +15,7 @@ class ADMMLoss(nn.Module):
         self.Z = ()
         self.U = ()
         self.dict_mask = {}
+        self.fkw = []
         for name, param in model.named_parameters():
             if name.split('.')[-1] == "weight" and len(param.shape) == 4:
                 assert(param.shape[2] == param.shape[3])
@@ -33,10 +34,10 @@ class ADMMLoss(nn.Module):
         return loss
 
     def get_state(self):
-        return self.Z, self.U, self.dict_mask, self.patterns
+        return self.Z, self.U, self.dict_mask, self.patterns, self.fkw
 
     def load_state(self, state):
-        self.Z, self.U, self.dict_mask, self.patterns = state
+        self.Z, self.U, self.dict_mask, self.patterns, self.fkw = state
 
     def get_mask(self):
         return self.dict_mask
@@ -114,25 +115,29 @@ class ADMMLoss(nn.Module):
         return res_list
 
     def apply_pruning(self):
-        self.dict_mask = {}
-        idx = 0
-        for name, param in self.model.named_parameters():
-            if name.split('.')[-1] == "weight" and len(param.shape) == 4:
-                weight = param.detach()
-                mask = torch.ones_like(weight).to(self.device)
-                weight_flatten = weight.view(-1, weight.shape[2] ** 2)
-                mask_flatten = mask.view(-1, mask.shape[2] ** 2)
-                norm_values = weight_flatten.norm(dim=1)
-                _, topk_indices = norm_values.topk(round((1 - self.percent[idx]) * norm_values.numel()))
-                mask_flatten[list(set(range(mask_flatten.shape[0])) - set(topk_indices.tolist())), :] = 0
-                weight_flatten_topk = weight_flatten[topk_indices, :]
-                mask_flatten_topk = mask_flatten[topk_indices, :]
-                pattern_compat = torch.zeros(topk_indices.numel(), self.num_patterns).type_as(weight).to(self.device)
-                for i in range(self.num_patterns):
-                    pattern_compat[:, i] = weight_flatten_topk[:, self.patterns[i]].norm(dim=1)
-                best_patterns = pattern_compat.argmax(1)
-                for i in range(best_patterns.numel()):
-                    mask_flatten_topk[i, list(set(range(mask_flatten.shape[1])) - set(self.patterns[best_patterns[i]]))] = 0
-                param.data.mul_(mask)
-                self.dict_mask[name] = mask
-                idx += 1
+        if not self.fkw or not self.dict_mask:
+            self.dict_mask = {}
+            self.fkw = []
+            idx = 0
+            for name, param in self.model.named_parameters():
+                if name.split('.')[-1] == "weight" and len(param.shape) == 4:
+                    weight = param.detach()
+                    mask = torch.ones_like(weight).to(self.device)
+                    weight_flatten = weight.view(-1, weight.shape[2] ** 2)
+                    mask_flatten = mask.view(-1, mask.shape[2] ** 2)
+                    norm_values = weight_flatten.norm(dim=1)
+                    _, topk_indices = norm_values.topk(round((1 - self.percent[idx]) * norm_values.numel()))
+                    topk_indices, _ = topk_indices.sort()
+                    mask_flatten[list(set(range(mask_flatten.shape[0])) - set(topk_indices.tolist())), :] = 0
+                    weight_flatten_topk = weight_flatten[topk_indices, :]
+                    mask_flatten_topk = mask_flatten[topk_indices, :]
+                    pattern_compat = torch.zeros(topk_indices.numel(), self.num_patterns).type_as(weight).to(self.device)
+                    for i in range(self.num_patterns):
+                        pattern_compat[:, i] = weight_flatten_topk[:, self.patterns[i]].norm(dim=1)
+                    best_patterns = pattern_compat.argmax(1)
+                    for i in range(best_patterns.numel()):
+                        mask_flatten_topk[i, list(set(range(mask_flatten.shape[1])) - set(self.patterns[best_patterns[i]]))] = 0
+                    param.data.mul_(mask)
+                    self.dict_mask[name] = mask
+                    idx += 1
+                    self.fkw.append(zip(topk_indices.tolist(), best_patterns.tolist())

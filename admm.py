@@ -140,4 +140,4 @@ class ADMMLoss(nn.Module):
                     param.data.mul_(mask)
                     self.dict_mask[name] = mask
                     idx += 1
-                    self.fkw.append(zip(topk_indices.tolist(), best_patterns.tolist())
+                    self.fkw.append(zip(topk_indices.tolist(), best_patterns.tolist()))

@@ -29,8 +29,8 @@ import random
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
-parser.add_argument('--resume', action='store_true',
-                    help='resume from checkpoint')
+parser.add_argument('--restart', action='store_true',
+                    help='start from scratch')
 parser.add_argument('--bitsW', type=int, default=8, metavar='b',
                     help='weight bits (default: 8)')
 parser.add_argument('--compress', action='store_true',
@@ -301,7 +301,7 @@ def main():
     config = EasyDict(config)
     logger.info(config)
 
-    setup_seed(20)
+    setup_seed(2020)
 
     # define network
     net = get_model(config)
@@ -322,8 +322,7 @@ def main():
     if 'pruning' in config:
         assert config.pruning.method == 'ADMM'
         assert config.epochs == config.pruning.pre_epochs + config.pruning.epochs + config.pruning.re_epochs
-        admm_criterion = ADMMLoss(net, device, config.pruning.rho,
-            config.pruning.ou_height, config.pruning.ou_width, config.pruning.percent)
+        admm_criterion = ADMMLoss(net, device, config.pruning.rho, config.pruning.percent)
     else:
         admm_criterion = None
     
@@ -339,11 +338,11 @@ def main():
     best_prec = 0
 
     if 'pruning' in config:
-        ckpt_name = "{}_{}x{}".format(config.ckpt_name, config.pruning.ou_height, config.pruning.ou_width)
+        ckpt_name = "{}_{}x{}".format(config.ckpt_name, config.pruning.size_pattern, config.pruning.num_patterns)
     else:
         ckpt_name = config.ckpt_name
     ckpt_file_name = args.work_path + '/' + ckpt_name + '.pth.tar'
-    if args.resume:
+    if not args.restart:
         best_prec, last_epoch = load_checkpoint(
             ckpt_file_name, net, optimizer=optimizer, admm_criterion=admm_criterion)
 
@@ -372,6 +371,10 @@ def main():
                 "======== Pre-Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
         if begin_epoch < config.pruning.pre_epochs + config.pruning.epochs:
+            # only consider 3x3 weight kernel
+            admm_criterion.calc_natural_patterns(
+                config.pruning.size_pattern, config.pruning.percent, config.pruning.num_patterns)
+
             admm_begin_epoch = max(begin_epoch, config.pruning.pre_epochs)
             logger.info("            =======  Training with ADMM Pruning  =======\n")
             for epoch in range(admm_begin_epoch, config.pruning.pre_epochs + config.pruning.epochs):

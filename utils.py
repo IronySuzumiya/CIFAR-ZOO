@@ -94,7 +94,7 @@ def save_checkpoint(state, is_best, filename):
 
 
 def load_checkpoint(path, model, optimizer=None, admm_criterion=None):
-    if os.path.isfile(path):
+    if os.path.exists(path) and os.path.isfile(path):
         logging.info("=== loading checkpoint '{}' ===".format(path))
 
         checkpoint = torch.load(path)
@@ -110,6 +110,10 @@ def load_checkpoint(path, model, optimizer=None, admm_criterion=None):
                          "checkpoint '{}' (epoch {}) ===".format(
                              path, last_epoch + 1))
             return best_prec, last_epoch
+        else:
+            return 0, -1
+    else:
+        return 0, -1
 
 
 def get_data_loader(transform_train, transform_test, config):

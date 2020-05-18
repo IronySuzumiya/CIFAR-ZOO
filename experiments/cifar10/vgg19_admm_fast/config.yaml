@@ -1,10 +1,10 @@
 # net architecture
-architecture: alexnet
+architecture: vgg19
 
 # log and checkpoint
 data_path: ./data
 ckpt_path: ./
-ckpt_name: alexnet
+ckpt_name: vgg19
 
 # datasets
 num_classes: 10
@@ -57,7 +57,7 @@ pruning:
   epochs: 50
   re_epochs: 20
   rho: 0.01
-  percent: [0.8, 0.85, 0.9, 0.95, 0.95, 0.95]
+  percent: [0.8, 0.8, 0.85, 0.85, 0.9, 0.9, 0.9, 0.9,
+    0.92, 0.92, 0.92, 0.92, 0.95, 0.95, 0.95, 0.95]
   num_patterns: 6
   size_pattern: 4
-  pattern_percent: 0.85

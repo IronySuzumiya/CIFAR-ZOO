@@ -2,22 +2,22 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import admm_cuda_lib
+from collections import Counter
 
 class ADMMLoss(nn.Module):
-    def __init__(self, model, device, rho, ou_height, ou_width, percent):
+    def __init__(self, model, device, rho, percent):
         super().__init__()
         self.model = model
         self.device = device
         self.rho = rho
-        self.ou_height = ou_height
-        self.ou_width = ou_width
         self.percent = percent
+        self.patterns = []
         self.Z = ()
         self.U = ()
         self.dict_mask = {}
-        self.dict_small_mask = {}
         for name, param in model.named_parameters():
-            if name.split('.')[-1] == "weight":
+            if name.split('.')[-1] == "weight" and len(param.shape) == 4:
+                assert(param.shape[2] == param.shape[3])
                 self.Z += (param.detach().clone().to(device),)
                 self.U += (torch.zeros_like(param).to(device),)
         
@@ -25,7 +25,7 @@ class ADMMLoss(nn.Module):
         idx = 0
         loss = F.cross_entropy(input, target)
         for name, param in self.model.named_parameters():
-            if name.split('.')[-1] == "weight":
+            if name.split('.')[-1] == "weight" and len(param.shape) == 4:
                 u = self.U[idx]
                 z = self.Z[idx]
                 loss += self.rho / 2 * (param - z + u).norm()
@@ -33,16 +33,38 @@ class ADMMLoss(nn.Module):
         return loss
 
     def get_state(self):
-        return self.Z, self.U, self.dict_mask, self.dict_small_mask
+        return self.Z, self.U, self.dict_mask, self.patterns
 
     def load_state(self, state):
-        self.Z, self.U, self.dict_mask, self.dict_small_mask = state
+        self.Z, self.U, self.dict_mask, self.patterns = state
 
     def get_mask(self):
         return self.dict_mask
 
-    def get_small_mask(self):
-        return self.dict_small_mask
+    def calc_natural_patterns(self, size_pattern, percent, num_patterns):
+        if not self.patterns:
+            self.size_pattern = size_pattern
+            self.num_patterns = num_patterns
+            pattern_list = []
+            idx = 0
+            for name, param in self.model.named_parameters():
+                if name.split('.')[-1] == "weight" and len(param.shape) == 4:
+                    kernel_abs = param.detach().view(-1, param.shape[2] ** 2).abs()
+                    values, indices = kernel_abs.topk(size_pattern)
+                    norm_values = values.norm(dim=1)
+                    _, topk_indices = norm_values.topk(round((1 - percent[idx]) * norm_values.numel()))
+                    final_indices = indices[topk_indices]
+                    # centre value must be in the pattern
+                    for i in range(final_indices.shape[0]):
+                        if param.shape[2] ** 2 // 2 not in final_indices[i]:
+                            final_indices[i][-1] = param.shape[2] ** 2 // 2
+                    final_indices, _ = final_indices.sort()
+                    pattern_list.extend(final_indices.tolist())
+                    idx += 1
+            pattern_dict = Counter(list(map(lambda x: tuple(x), pattern_list)))
+            sorted_pattern_dict = sorted(pattern_dict.items(), key=lambda x: x[1], reverse=True)
+            patterns, count = zip(*sorted_pattern_dict[:num_patterns])
+            self.patterns = patterns
 
     def update_ADMM(self):
         self.update_X()
@@ -52,7 +74,7 @@ class ADMMLoss(nn.Module):
     def update_X(self):
         self.X = ()
         for name, param in self.model.named_parameters():
-            if name.split('.')[-1] == "weight":
+            if name.split('.')[-1] == "weight" and len(param.shape) == 4:
                 self.X += (param.detach(),)
 
     def update_Z(self):
@@ -60,24 +82,17 @@ class ADMMLoss(nn.Module):
         idx = 0
         for x, u in zip(self.X, self.U):
             z = x + u
-            if self.ou_height > 1 or self.ou_width > 1:
-                rram = z.view(z.shape[0], -1)
-                tmp = torch.zeros(((rram.shape[0] - 1) // self.ou_width + 1, (rram.shape[1] - 1) // self.ou_height + 1)).to(self.device)
-                admm_cuda_lib.struct_norm(rram, tmp, self.ou_width, self.ou_height)
-                pcen, _ = tmp.view(-1).kthvalue(round(self.percent[idx] * tmp.numel()))
-                upon_threshold = tmp >= pcen
-                res1 = rram.shape[0] % self.ou_width
-                res2 = rram.shape[1] % self.ou_height
-                for i in range(self.ou_width):
-                    for j in range(self.ou_height):
-                        if i < res1 or res1 == 0:
-                            rram.data[i::self.ou_width, j::self.ou_height] *= upon_threshold if j < res2 or res2 == 0 else upon_threshold[:, :-1]
-                        else:
-                            rram.data[i::self.ou_width, j::self.ou_height] *= upon_threshold[:-1, :] if j < res2 or res2 == 0 else upon_threshold[:-1, :-1]
-            else:
-                pcen, _ = torch.kthvalue(abs(z.view(-1)), round(self.percent[idx] * z.numel()))
-                under_threshold = abs(z) < pcen
-                z.data[under_threshold] = 0
+            z_flatten = z.view(-1, z.shape[2] ** 2)
+            norm_values = z_flatten.norm(dim=1)
+            _, topk_indices = norm_values.topk(round((1 - self.percent[idx]) * norm_values.numel()))
+            z_flatten[list(set(range(z_flatten.shape[0])) - set(topk_indices.tolist())), :] = 0
+            z_flatten_topk = z_flatten[topk_indices, :]
+            pattern_compat = torch.zeros(topk_indices.numel(), self.num_patterns).type_as(z).to(self.device)
+            for i in range(self.num_patterns):
+                pattern_compat[:, i] = z_flatten_topk[:, self.patterns[i]].norm(dim=1)
+            best_patterns = pattern_compat.argmax(1)
+            for i in range(best_patterns.numel()):
+                z_flatten_topk[i, list(set(range(z_flatten.shape[1])) - set(self.patterns[best_patterns[i]]))] = 0
             self.Z += (z,)
             idx += 1
 
@@ -91,8 +106,8 @@ class ADMMLoss(nn.Module):
     def calc_convergence(self):
         idx = 0
         res_list = []
-        for name, _ in self.model.named_parameters():
-            if name.split('.')[-1] == "weight":
+        for name, param in self.model.named_parameters():
+            if name.split('.')[-1] == "weight" and len(param.shape) == 4:
                 x, z = self.X[idx], self.Z[idx]
                 res_list.append((name, (x-z).norm().item() / x.norm().item()))
                 idx += 1
@@ -100,36 +115,24 @@ class ADMMLoss(nn.Module):
 
     def apply_pruning(self):
         self.dict_mask = {}
-        self.dict_small_mask = {}
         idx = 0
         for name, param in self.model.named_parameters():
-            if name.split('.')[-1] == "weight":
+            if name.split('.')[-1] == "weight" and len(param.shape) == 4:
                 weight = param.detach()
-                if self.ou_height > 1 or self.ou_width > 1:
-                    mask = torch.zeros_like(weight, dtype=torch.bool).to(self.device)
-                    rram = weight.view(weight.shape[0], -1)
-                    rram_mask = mask.view(mask.shape[0], -1)
-                    tmp = torch.zeros(((rram.shape[0] - 1) // self.ou_width + 1, (rram.shape[1] - 1) // self.ou_height + 1)).to(self.device)
-                    admm_cuda_lib.struct_norm(rram, tmp, self.ou_width, self.ou_height)
-                    pcen, _ = tmp.view(-1).kthvalue(round(self.percent[idx] * tmp.numel()))
-                    upon_threshold = tmp >= pcen
-                    res1 = rram.shape[0] % self.ou_width
-                    res2 = rram.shape[1] % self.ou_height
-                    for i in range(self.ou_width):
-                        for j in range(self.ou_height):
-                            if i < res1 or res1 == 0:
-                                rram_mask.data[i::self.ou_width, j::self.ou_height] = upon_threshold if j < res2 or res2 == 0 else upon_threshold[:, :-1]
-                            else:
-                                rram_mask.data[i::self.ou_width, j::self.ou_height] = upon_threshold[:-1, :] if j < res2 or res2 == 0 else upon_threshold[:-1, :-1]
-                else:
-                    pcen, _ = torch.kthvalue(abs(weight.view(-1)), round(self.percent[idx] * weight.numel()))
-                    mask = (abs(weight) >= pcen).to(self.device)
+                mask = torch.ones_like(weight).to(self.device)
+                weight_flatten = weight.view(-1, weight.shape[2] ** 2)
+                mask_flatten = mask.view(-1, mask.shape[2] ** 2)
+                norm_values = weight_flatten.norm(dim=1)
+                _, topk_indices = norm_values.topk(round((1 - self.percent[idx]) * norm_values.numel()))
+                mask_flatten[list(set(range(mask_flatten.shape[0])) - set(topk_indices.tolist())), :] = 0
+                weight_flatten_topk = weight_flatten[topk_indices, :]
+                mask_flatten_topk = mask_flatten[topk_indices, :]
+                pattern_compat = torch.zeros(topk_indices.numel(), self.num_patterns).type_as(weight).to(self.device)
+                for i in range(self.num_patterns):
+                    pattern_compat[:, i] = weight_flatten_topk[:, self.patterns[i]].norm(dim=1)
+                best_patterns = pattern_compat.argmax(1)
+                for i in range(best_patterns.numel()):
+                    mask_flatten_topk[i, list(set(range(mask_flatten.shape[1])) - set(self.patterns[best_patterns[i]]))] = 0
                 param.data.mul_(mask)
                 self.dict_mask[name] = mask
-                '''
-                small_mask = torch.zeros_like(weight, dtype=torch.bool).to(self.device)
-                small_mask = weight > 1e-5
-                param.data.mul_(small_mask)
-                self.dict_small_mask[name] = small_mask
-                '''
                 idx += 1

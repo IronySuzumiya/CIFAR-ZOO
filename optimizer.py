@@ -495,7 +495,7 @@ class PruneSGD(NameOptimizer):
                     else:
                         d_p = buf
 
-                if name.split('.')[-1] == "weight":
+                if name.split('.')[-1] == "weight" and len(p.shape) == 4:
                     p.add_(d_p.mul(mask[name]), alpha=-group['lr'])
                 else:
                     p.add_(d_p, alpha=-group['lr'])

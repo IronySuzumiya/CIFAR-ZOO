@@ -75,7 +75,7 @@ def LCS(seq1, seq2):
         if lcs[i][j][0] == '↑':
             i -= 1
     subseq.reverse()
-    return subseq, lcs
+    return subseq
 
 def main(seq1, seq2):
     #subseq1, subseq2, max_score, _ = NeedlemanWunsch(seq1, seq2)
@@ -83,9 +83,7 @@ def main(seq1, seq2):
     #print("max score：", max_score)
     #print("subseq1:", subseq1)
     #print("subseq2:", subseq2)
-    subseq, lcs = LCS(seq1, seq2)
-    for i in range(len(lcs)):
-        print(lcs[i])
+    subseq = LCS(seq1, seq2)
     print(subseq)
 
 if __name__ == '__main__':

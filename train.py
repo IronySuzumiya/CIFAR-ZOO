@@ -439,13 +439,13 @@ def main():
             for i in range(len(fkw[idx]) - 1):
                 longest_subseqs.append([])
                 for j in range(i+1, len(fkw[idx])):
-                    subseq, _, _, = NeedlemanWunsch(fkw[idx][i], fkw[idx][j])
+                    subseq = LCS(fkw[idx][i], fkw[idx][j])
                     len_subseqs[i, j] = len(subseq)
                     if len(subseq) > len(longest_subseqs[-1]):
                         longest_subseqs[-1] = subseq
                 pre_max_len, pre_max_len_index = len_subseqs[:, i+1].max(dim=0)
                 if len(longest_subseqs[-1]) < pre_max_len.item():
-                    subseq, _, _, = NeedlemanWunsch(fkw[idx][i], fkw[idx][pre_max_len_index.item()])
+                    subseq = LCS(fkw[idx][i], fkw[idx][pre_max_len_index.item()])
                     longest_subseqs[-1] = subseq
             logger.info(len_subseqs)
             for i in range(len(longest_subseqs)):

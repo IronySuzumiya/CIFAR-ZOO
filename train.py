@@ -27,7 +27,7 @@ from optimizer import PruneSGD
 import numpy as np
 import random
 
-from NeedlemanWunsch import NeedlemanWunsch
+from lcs import LCS
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)

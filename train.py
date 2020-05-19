@@ -432,9 +432,9 @@ def main():
 
         if args.show_fkw:
             logger.info("            =======  Showing Number of Same Connectivity Patterns Each Layer  =======\n")
-            idx = 0
+            idx = 1
             fkw = admm_criterion.get_fkw()
-            len_subseqs = torch.zeros(len(fkw[idx]), len(fkw[idx]))
+            len_subseqs = torch.zeros((len(fkw[idx]), len(fkw[idx])), dtype=torch.int)
             longest_subseqs = []
             for i in range(len(fkw[idx]) - 1):
                 longest_subseqs.append([])
@@ -443,8 +443,11 @@ def main():
                     len_subseqs[i, j] = len(subseq)
                     if len(subseq) > len(longest_subseqs[-1]):
                         longest_subseqs[-1] = subseq
+                pre_max_len, pre_max_len_index = len_subseqs[:, i+1].max(dim=0)
+                if len(longest_subseqs[-1]) < pre_max_len.item():
+                    subseq, _, _, = NeedlemanWunsch(fkw[idx][i], fkw[idx][pre_max_len_index.item()])
+                    longest_subseqs[-1] = subseq
             logger.info(len_subseqs)
-            logger.info(len_subseqs.argmax(1))
             for i in range(len(longest_subseqs)):
                 logger.info(longest_subseqs[i])
             '''

@@ -27,6 +27,8 @@ from optimizer import PruneSGD
 import numpy as np
 import random
 
+from NeedlemanWunsch import NeedlemanWunsch
+
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
 parser.add_argument('--restart', action='store_true',
@@ -431,12 +433,28 @@ def main():
         if args.show_fkw:
             logger.info("            =======  Showing Number of Same Connectivity Patterns Each Layer  =======\n")
             idx = 0
-            res = admm_criterion.calc_num_same_connectivity_patterns()
+            fkw = admm_criterion.get_fkw()
+            len_subseqs = torch.zeros(len(fkw[idx]), len(fkw[idx]))
+            longest_subseqs = []
+            for i in range(len(fkw[idx]) - 1):
+                longest_subseqs.append([])
+                for j in range(i+1, len(fkw[idx])):
+                    subseq, _, _, = NeedlemanWunsch(fkw[idx][i], fkw[idx][j])
+                    len_subseqs[i, j] = len(subseq)
+                    if len(subseq) > len(longest_subseqs[-1]):
+                        longest_subseqs[-1] = subseq
+            logger.info(len_subseqs)
+            logger.info(len_subseqs.argmax(1))
+            for i in range(len(longest_subseqs)):
+                logger.info(longest_subseqs[i])
+            '''
             for name, param in net.named_parameters():
                 if name.split('.')[-1] == "weight" and len(param.shape) == 4:
+                    for i in range(fkw[idx][0])
                     logger.info(name)
                     logger.info(res[idx])
                     idx += 1
+            '''
         
     else:
         logger.info("            =======  Training  =======\n")

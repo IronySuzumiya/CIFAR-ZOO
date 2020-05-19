@@ -45,12 +45,6 @@ class ADMMLoss(nn.Module):
     def get_fkw(self):
         return self.fkw
 
-    def calc_num_same_connectivity_patterns(self):
-        res = []
-        for i in range(len(self.fkw)):
-            res.append(Counter(list(map(lambda x: tuple(map(lambda y: y[0], x)), self.fkw[i]))).items())
-        return res
-
     def calc_natural_patterns(self, size_pattern, percent, num_patterns):
         if not self.patterns:
             pattern_list = []

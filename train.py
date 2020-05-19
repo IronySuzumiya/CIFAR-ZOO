@@ -449,7 +449,7 @@ def main():
                     longest_subseqs[-1] = subseq
             logger.info(len_subseqs)
             for i in range(len(longest_subseqs)):
-                logger.info(longest_subseqs[i])
+                logger.info("{} accounted for {}%".format(longest_subseqs[i], len(longest_subseqs[i]) * 100.0 / len(fkw[idx][i])))
             '''
             for name, param in net.named_parameters():
                 if name.split('.')[-1] == "weight" and len(param.shape) == 4:

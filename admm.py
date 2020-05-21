@@ -16,10 +16,7 @@ class ADMMLoss(nn.Module):
         self.dict_mask = {}
         self.fkw = []
         self.mode = mode
-        if mode == 'pattern-based':
-            self.patterns = []
-        elif mode == 'grid-based':
-            self.grid
+        self.patterns = []
         self.update_Z = self.update_Z_unstructured if mode == 'unstructured' \
             else self.update_Z_grid_based if mode == 'grid-based' \
             else self.update_Z_pattern_based if mode == 'pattern-based' \

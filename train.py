@@ -33,8 +33,8 @@ parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
 parser.add_argument('--restart', action='store_true',
                     help='start from scratch')
-parser.add_argument('--show-fkw', action='store_true',
-                    help='show fkw')
+parser.add_argument('--show-pcg', action='store_true',
+                    help='show patterned channel groups')
 parser.add_argument('--bitsW', type=int, default=8, metavar='b',
                     help='weight bits (default: 8)')
 parser.add_argument('--compress', action='store_true',
@@ -286,6 +286,57 @@ def show_compressed_weights(model, mask, device):
             logger.info("   == row_index: {}".format(row_index[name]))
             logger.info("   == non_zero_weights: {}".format(non_zero_weights[name]))
 
+def show_pcg(model, admm_criterion, show_seq=False):
+    idx = 0
+    fkw = admm_criterion.get_fkw()
+    for name, param in model.named_parameters():
+        if name.split('.')[-1] == "weight" and len(param.shape) == 4:
+            logger.info(name)
+
+            len_subseqs = torch.zeros((len(fkw[idx]), len(fkw[idx])), dtype=torch.int)
+            longest_subseqs = []
+
+            longest_subseq = []
+            longest_subseq_idx = 1
+            for j in range(1, len(fkw[idx])):
+                subseq = LCS(fkw[idx][0], fkw[idx][j])
+                len_subseqs[0, j] = len(subseq)
+                if len(subseq) > len(longest_subseq):
+                    longest_subseq = subseq
+                    longest_subseq_idx = j
+            longest_subseqs.append((longest_subseq_idx, longest_subseq))
+
+            for i in range(1, len(fkw[idx]) - 1):
+                longest_subseq = []
+                longest_subseq_idx = i + 1
+                for j in range(i+1, len(fkw[idx])):
+                    subseq = LCS(fkw[idx][i], fkw[idx][j])
+                    len_subseqs[i, j] = len(subseq)
+                    if len(subseq) > len(longest_subseq):
+                        longest_subseq = subseq
+                        longest_subseq_idx = j
+                pre_max_len, pre_max_len_index = len_subseqs[:i, i].max(dim=0)
+                if len(longest_subseq) < pre_max_len.item():
+                    longest_subseq_idx = pre_max_len_index.item()
+                    subseq = LCS(fkw[idx][i], fkw[idx][longest_subseq_idx])
+                    longest_subseq = subseq
+                longest_subseqs.append((longest_subseq_idx, longest_subseq))
+            
+            logger.info("len subseqs matrix:\n{}".format(len_subseqs))
+            for i in range(len(longest_subseqs)):
+                seq_idx = longest_subseqs[i][0]
+                seq = longest_subseqs[i][1]
+                len_subseq = len_subseqs[i, seq_idx] if i < seq_idx else len_subseqs[seq_idx, i]
+                len_i = len(fkw[idx][i])
+                len_seq_idx = len(fkw[idx][seq_idx])
+                pcen0 = len_subseq * 100.0 / len_i if len_i > 0 else 100.0
+                pcen1 = len_subseq * 100.0 / len_seq_idx if len_seq_idx > 0 else 100.0
+                logger.info("fkw[{}] & fkw[{}]: len = {}, pcen = ({:.1f}%, {:.1f}%)"
+                    .format(i, seq_idx, len_subseq, pcen0, pcen1))
+                if show_seq:
+                    logger.info("  seq: {}".format(seq))
+            idx += 1
+
 def setup_seed(seed):
    torch.manual_seed(seed)
    torch.cuda.manual_seed_all(seed)
@@ -430,34 +481,9 @@ def main():
             logger.info("            =======  Showing Compressed Weights  =======\n")
             show_compressed_weights(net, admm_criterion.get_mask(), device)
 
-        if args.show_fkw:
-            logger.info("            =======  Showing Number of Same Connectivity Patterns Each Layer  =======\n")
-            idx = 1
-            fkw = admm_criterion.get_fkw()
-            len_subseqs = torch.zeros((len(fkw[idx]), len(fkw[idx])), dtype=torch.int)
-            longest_subseqs = []
-            for i in range(len(fkw[idx]) - 1):
-                longest_subseqs.append([])
-                for j in range(i+1, len(fkw[idx])):
-                    subseq = LCS(fkw[idx][i], fkw[idx][j])
-                    len_subseqs[i, j] = len(subseq)
-                    if len(subseq) > len(longest_subseqs[-1]):
-                        longest_subseqs[-1] = subseq
-                pre_max_len, pre_max_len_index = len_subseqs[:, i+1].max(dim=0)
-                if len(longest_subseqs[-1]) < pre_max_len.item():
-                    subseq = LCS(fkw[idx][i], fkw[idx][pre_max_len_index.item()])
-                    longest_subseqs[-1] = subseq
-            logger.info(len_subseqs)
-            for i in range(len(longest_subseqs)):
-                logger.info("{} accounted for {:.1f}%".format(longest_subseqs[i], 100.0 if len(fkw[idx][i]) == 0 else len(longest_subseqs[i]) * 100.0 / len(fkw[idx][i])))
-            '''
-            for name, param in net.named_parameters():
-                if name.split('.')[-1] == "weight" and len(param.shape) == 4:
-                    for i in range(fkw[idx][0])
-                    logger.info(name)
-                    logger.info(res[idx])
-                    idx += 1
-            '''
+        if args.show_pcg:
+            logger.info("            =======  Showing Patterned Channel Groups  =======\n")
+            show_pcg(net, admm_criterion)
         
     else:
         logger.info("            =======  Training  =======\n")

@@ -252,48 +252,70 @@ def display_fkwmd(model, admm_criterion, show_seq=False):
                     logger.info("  seq: {}".format(seq))
             idx += 1
 
+def calc_and_save_best_channel_matches_(fkw, name):
+    logger.info("=====  {} running...  =====".format(name))
+
+    matches = []
+
+    num_total_units = 0
+    for i in range(len(fkw)):
+        num_total_units += len(fkw[i])
+
+    for i in range(0, len(fkw) - 1):
+        while len(fkw[i]):
+            longest_subseq = []
+            longest_subseq_idx = i + 1
+            for j in range(i + 1, len(fkw)):
+                subseq, subseqid1, subseqid2 = LCS(fkw[i], fkw[j])
+                if len(subseq) > len(longest_subseq):
+                    longest_subseq = subseq
+                    longest_subseq_idx = j
+            if len(longest_subseq) == 0:
+                break
+            matches.append((i, longest_subseq_idx, len(longest_subseq), longest_subseq))
+            for j in reversed(subseqid1):
+                del fkw[i]
+            for j in reversed(subseqid2):
+                del fkw[longest_subseq_idx]
+    
+    num_left_units = 0
+    for i in range(len(fkw)):
+        num_left_units += len(fkw[i])
+
+    left_4_dead_percent = num_left_units * 100.0 / num_total_units if num_total_units else 0.0
+
+    logger.info("=====  {} done.  =====".format(name))
+
+    return matches, left_4_dead_percent
+
 def calc_and_save_best_channel_matches(model, admm_criterion, ckpt_name):
     idx = 0
     fkw = deepcopy(admm_criterion.get_fkw())
+    pool = mp.Pool(processes=16)
+    process_results = []
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight" and len(param.shape) == 4:
-            logger.info("=====  {}  =====".format(name))
-
-            matches = []
-
-            num_total_units = 0
-            for i in range(len(fkw[idx])):
-                num_total_units += len(fkw[idx][i])
-
-            for i in range(0, len(fkw[idx]) - 1):
-                while len(fkw[idx][i]):
-                    longest_subseq = []
-                    longest_subseq_idx = i + 1
-                    for j in range(i + 1, len(fkw[idx])):
-                        subseq, subseqid1, subseqid2 = LCS(fkw[idx][i], fkw[idx][j])
-                        if len(subseq) > len(longest_subseq):
-                            longest_subseq = subseq
-                            longest_subseq_idx = j
-                    if len(longest_subseq) == 0:
-                        break
-                    matches.append((i, longest_subseq_idx, len(longest_subseq), longest_subseq))
-                    for j in reversed(subseqid1):
-                        del fkw[idx][i]
-                    for j in reversed(subseqid2):
-                        del fkw[idx][longest_subseq_idx]
-            
-            num_left_units = 0
-            for i in range(len(fkw[idx])):
-                num_left_units += len(fkw[idx][i])
-
-            left_4_dead_percent = num_left_units * 100.0 / num_total_units if num_total_units else 0.0
-
-            file_name = args.work_path + '/' + ckpt_name + '_' + name + '.bcm'
-            torch.save((matches, left_4_dead_percent), file_name)
-
-            logger.info("=====  {} done.  =====".format(name))
-            
+            process_results.append(
+                pool.apply_async(calc_and_save_best_channel_matches_, (fkw[idx], name))
+            )
             idx += 1
+    
+    pool.close()
+    pool.join()
+
+    idx = 0
+    for name, param in model.named_parameters():
+        if name.split('.')[-1] == "weight" and len(param.shape) == 4:
+            file_name = args.work_path + '/' + ckpt_name + '_' + name + '.bcm'
+            try:
+                matches, left_4_dead_percent = process_results[idx].get()
+            except:
+                with open(args.work_path + '/error.txt', 'w') as error_file:
+                    traceback.print_exc(file=error_file)
+            torch.save((matches, left_4_dead_percent), file_name)
+            idx += 1
+
+    logger.info("=====  All done.  =====")
 
 def display_best_channel_matches(model, ckpt_name, display_subseq=False):
     for name, param in model.named_parameters():

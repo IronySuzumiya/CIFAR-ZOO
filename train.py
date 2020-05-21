@@ -33,7 +33,7 @@ parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
 parser.add_argument('--restart', action='store_true',
                     help='start from scratch')
-parser.add_argument('--display_fkwmd', action='store_true',
+parser.add_argument('--display-fkwmd', action='store_true',
                     help='display matching degree between each FKW after reordering')
 parser.add_argument('--bitsW', type=int, default=8, metavar='b',
                     help='weight bits (default: 8)')

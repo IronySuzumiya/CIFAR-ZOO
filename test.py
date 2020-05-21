@@ -97,7 +97,12 @@ def main():
     criterion = nn.CrossEntropyLoss()
     
     if 'pruning' in config:
-        ckpt_name = "{}_{}x{}".format(config.ckpt_name, config.pruning.size_pattern, config.pruning.num_patterns)
+        if config.pruning.mode == 'unstructured':
+            ckpt_name = "{}_unstruct".format(config.ckpt_name)
+        elif config.pruning.mode == 'grid-based':
+            ckpt_name = "{}_grid_{}x{}".format(config.ckpt_name, config.pruning.grid_height, config.pruning.grid_width)
+        elif config.pruning.mode == 'pattern-based':
+            ckpt_name = "{}_pattern_{}x{}".format(config.ckpt_name, config.pruning.size_pattern, config.pruning.num_patterns)
     else:
         ckpt_name = config.ckpt_name
     ckpt_file_name = args.work_path + '/' + ckpt_name + '.pth.tar'

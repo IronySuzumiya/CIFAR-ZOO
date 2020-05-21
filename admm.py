@@ -182,7 +182,7 @@ class ADMMLoss(nn.Module):
                 self.dict_mask[name] = mask
                 idx += 1
                 self.fkw.append([])
-                rram_mask = mask.view(msak.shape[0], -1)
+                rram_mask = mask.view(mask.shape[0], -1)
                 for i in range(rram_mask.shape[0]):
                     self.fkw[-1].append(rram_mask[i, :].nonzero().view(-1).tolist())
 

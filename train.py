@@ -257,6 +257,8 @@ def calc_and_save_best_channel_matches(model, admm_criterion, ckpt_name):
     fkw = deepcopy(admm_criterion.get_fkw())
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight" and len(param.shape) == 4:
+            logger.info("=====  {}  =====".format(name))
+
             matches = []
 
             num_total_units = 0
@@ -287,8 +289,9 @@ def calc_and_save_best_channel_matches(model, admm_criterion, ckpt_name):
             left_4_dead_percent = num_left_units * 100.0 / num_total_units if num_total_units else 0.0
 
             file_name = args.work_path + '/' + ckpt_name + '_' + name + '.bcm'
-
             torch.save((matches, left_4_dead_percent), file_name)
+
+            logger.info("=====  {} done.  =====".format(name))
             
             idx += 1
 

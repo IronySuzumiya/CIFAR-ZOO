@@ -29,12 +29,18 @@ import random
 
 from lcs import LCS
 
+from copy import deepcopy
+
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
 parser.add_argument('--restart', action='store_true',
                     help='start from scratch')
 parser.add_argument('--display-fkwmd', action='store_true',
                     help='display matching degree between each FKW after reordering')
+parser.add_argument('--calc-save-bcm', action='store_true',
+                    help='calculate and save best channel matches')
+parser.add_argument('--display-bcm', action='store_true',
+                    help='display best channel matches')
 parser.add_argument('--bitsW', type=int, default=8, metavar='b',
                     help='weight bits (default: 8)')
 #parser.add_argument('--display_cprs', action='store_true',
@@ -208,7 +214,7 @@ def display_fkwmd(model, admm_criterion, show_seq=False):
             longest_subseq = []
             longest_subseq_idx = 1
             for j in range(1, len(fkw[idx])):
-                subseq = LCS(fkw[idx][0], fkw[idx][j])
+                subseq, _, _ = LCS(fkw[idx][0], fkw[idx][j])
                 len_subseqs[0, j] = len(subseq)
                 if len(subseq) > len(longest_subseq):
                     longest_subseq = subseq
@@ -219,7 +225,7 @@ def display_fkwmd(model, admm_criterion, show_seq=False):
                 longest_subseq = []
                 longest_subseq_idx = i + 1
                 for j in range(i+1, len(fkw[idx])):
-                    subseq = LCS(fkw[idx][i], fkw[idx][j])
+                    subseq, _, _ = LCS(fkw[idx][i], fkw[idx][j])
                     len_subseqs[i, j] = len(subseq)
                     if len(subseq) > len(longest_subseq):
                         longest_subseq = subseq
@@ -227,7 +233,7 @@ def display_fkwmd(model, admm_criterion, show_seq=False):
                 pre_max_len, pre_max_len_index = len_subseqs[:i, i].max(dim=0)
                 if len(longest_subseq) < pre_max_len.item():
                     longest_subseq_idx = pre_max_len_index.item()
-                    subseq = LCS(fkw[idx][i], fkw[idx][longest_subseq_idx])
+                    subseq, _, _ = LCS(fkw[idx][i], fkw[idx][longest_subseq_idx])
                     longest_subseq = subseq
                 longest_subseqs.append((longest_subseq_idx, longest_subseq))
             
@@ -246,6 +252,65 @@ def display_fkwmd(model, admm_criterion, show_seq=False):
                     logger.info("  seq: {}".format(seq))
             idx += 1
 
+def calc_and_save_best_channel_matches(model, admm_criterion, ckpt_name):
+    idx = 0
+    fkw = deepcopy(admm_criterion.get_fkw())
+    for name, param in model.named_parameters():
+        if name.split('.')[-1] == "weight" and len(param.shape) == 4:
+            matches = []
+
+            num_total_units = 0
+            for i in range(len(fkw[idx])):
+                num_total_units += len(fkw[idx][i])
+
+            for i in range(0, len(fkw[idx]) - 1):
+                while len(fkw[idx][i]):
+                    longest_subseq = []
+                    longest_subseq_idx = i + 1
+                    for j in range(i + 1, len(fkw[idx])):
+                        subseq, subseqid1, subseqid2 = LCS(fkw[idx][i], fkw[idx][j])
+                        if len(subseq) > len(longest_subseq):
+                            longest_subseq = subseq
+                            longest_subseq_idx = j
+                    if len(longest_subseq) == 0:
+                        break
+                    matches.append((i, longest_subseq_idx, len(longest_subseq), longest_subseq))
+                    for j in reversed(subseqid1):
+                        del fkw[idx][i]
+                    for j in reversed(subseqid2):
+                        del fkw[idx][longest_subseq_idx]
+            
+            num_left_units = 0
+            for i in range(len(fkw[idx])):
+                num_left_units += len(fkw[idx][i])
+
+            left_4_dead_percent = num_left_units * 100.0 / num_total_units if num_total_units else 0.0
+
+            file_name = args.work_path + '/' + ckpt_name + '_' + name + '.bcm'
+
+            torch.save((matches, left_4_dead_percent), file_name)
+            
+            idx += 1
+
+def display_best_channel_matches(model, ckpt_name, display_subseq=False):
+    for name, param in model.named_parameters():
+        if name.split('.')[-1] == "weight" and len(param.shape) == 4:
+            logger.info("=====  {}  =====".format(name))
+
+            file_name = args.work_path + '/' + ckpt_name + '_' + name + '.bcm'
+            matches, left_4_dead_percent = torch.load(file_name)
+
+            logger.info("Matches List:")
+
+            if not display_subseq:
+                matches_withnot_subseq = list(map(lambda x: x[:3], matches))
+                logger.info(matches_withnot_subseq)
+            else:
+                logger.info(matches)
+
+            logger.info("Left Percent: {:.1f}%".format(left_4_dead_percent))
+
+
 def setup_seed(seed):
    torch.manual_seed(seed)
    torch.cuda.manual_seed_all(seed)
@@ -256,6 +321,7 @@ def setup_seed(seed):
 
 def main():
     global args, config, last_epoch, best_prec, writer
+
     writer = SummaryWriter(log_dir=args.work_path + '/event')
 
     # read config from yaml file
@@ -405,6 +471,14 @@ def main():
         if args.display_fkwmd:
             logger.info("            =======  Displaying Matching Degree between each FKW after Reordering  =======\n")
             display_fkwmd(net, admm_criterion)
+
+        if args.calc_save_bcm:
+            logger.info("            =======  Calculating and Saving Best Channel Matches  =======\n")
+            calc_and_save_best_channel_matches(net, admm_criterion, ckpt_name)
+
+        if args.display_bcm:
+            logger.info("            =======  Displaying Best Channel Matches  =======\n")
+            display_best_channel_matches(net, ckpt_name)
         
     else:
         logger.info("            =======  Training  =======\n")

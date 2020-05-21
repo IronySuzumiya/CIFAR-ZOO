@@ -65,17 +65,24 @@ def LCS(seq1, seq2):
     i = len1 - 1
     j = len2 - 1
     subseq = []
+    subseqid1 = []
+    subseqid2 = []
     while i > 0 and j > 0:
         if lcs[i][j][0] == '↖':
             subseq.append(lcs[i][0][0])
             i -= 1
             j -= 1
+            subseqid1.append(i)
+            subseqid2.append(j)
         if lcs[i][j][0] == '←':
             j -= 1
         if lcs[i][j][0] == '↑':
             i -= 1
     subseq.reverse()
-    return subseq
+    # use reversed indices to delete elements from the original list
+    #subseqid1.reverse()
+    #subseqid2.reverse()
+    return subseq, subseqid1, subseqid2
 
 def main(seq1, seq2):
     #subseq1, subseq2, max_score, _ = NeedlemanWunsch(seq1, seq2)
@@ -83,13 +90,15 @@ def main(seq1, seq2):
     #print("max score：", max_score)
     #print("subseq1:", subseq1)
     #print("subseq2:", subseq2)
-    subseq = LCS(seq1, seq2)
+    subseq, subseqid1, subseqid2 = LCS(seq1, seq2)
     print(subseq)
+    print(subseqid1)
+    print(subseqid2)
 
 if __name__ == '__main__':
-    seq1 = [(7, 1), (11, 1), (32, 0), (33, 1), (37, 4), (52, 1), (56, 1), (63, 3)]
-    seq2 = [(7, 0), (11, 3), (32, 0), (33, 5), (37, 2), (50, 4), (52, 1), (62, 3), (63, 2)]
-    #seq1 = "GGGATCGA"
-    #seq2 = "GAATTCAGTTA"
+    #seq1 = [(7, 1), (11, 1), (32, 0), (33, 1), (37, 4), (52, 1), (56, 1), (63, 3)]
+    #seq2 = [(7, 0), (11, 3), (32, 0), (33, 5), (37, 2), (50, 4), (52, 1), (62, 3), (63, 2)]
+    seq1 = "GGGATCGA"
+    seq2 = "GAATTCAGTTA"
 
     main(seq1, seq2)

@@ -27,14 +27,18 @@ from optimizer import PruneSGD
 import numpy as np
 import random
 
+from lcs import LCS
+
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Dataset Training')
 parser.add_argument('--work-path', required=True, type=str)
-parser.add_argument('--resume', action='store_true',
-                    help='resume from checkpoint')
+parser.add_argument('--restart', action='store_true',
+                    help='start from scratch')
+parser.add_argument('--display_fkwmd', action='store_true',
+                    help='display matching degree between each FKW after reordering')
 parser.add_argument('--bitsW', type=int, default=8, metavar='b',
                     help='weight bits (default: 8)')
-parser.add_argument('--compress', action='store_true',
-                    help='compress the trained model')
+#parser.add_argument('--display_cprs', action='store_true',
+#                    help='display the compressed trained model')
 
 args = parser.parse_args()
 logger = Logger(log_file_name=args.work_path + '/log.txt',
@@ -179,71 +183,10 @@ def save_checkpoint_(net, acc, epoch, optimizer, admm_state, ckpt_name):
     if is_best:
         best_prec = acc
 
-def update_dict(dict, n):
-    if n in dict:
-        dict[n] += 1
-    else:
-        dict[n] = 1
+def load_checkpoint_(ckpt_name, net, optimizer=None, admm_criterion=None):
+    global args
 
-def show_statistic_result_(rram_proj, i_beg, i_end, j_beg, j_end):
-    bad_count = 0
-
-    for i in range(i_beg, i_end):
-        for j in range(j_beg, j_end):
-            ou = rram_proj[i * config.pruning.ou_height : (i + 1) * config.pruning.ou_height, j * config.pruning.ou_width : (j + 1) * config.pruning.ou_width]
-            ou_size = ou.shape[0] * ou.shape[1]
-            nonzero_percent = 100. * len(ou.nonzero()[0]) / ou_size
-            positive_percent = 100. * len((ou > 0).nonzero()[0]) / ou_size
-            positive_over_nonzero = 100. * positive_percent / nonzero_percent
-            if positive_over_nonzero < 80. and positive_over_nonzero > 20.:
-                bad_count += 1
-
-    return bad_count
-
-def show_statistic_result(model):
-    global config
-
-    pool = mp.Pool(processes=16)
-
-    process_results = []
-
-    n_ou = 0
-
-    i_block_size = config.pruning.ou_height * 64
-    j_block_size = config.pruning.ou_width * 64
-
-    for name, param in model.named_parameters():
-        if name.split('.')[-1] == "weight":
-            rram_proj = param.detach().cpu().view(param.shape[0], -1).numpy().T
-            i_len = (rram_proj.shape[0] - 1) // config.pruning.ou_height + 1
-            j_len = (rram_proj.shape[1] - 1) // config.pruning.ou_width + 1
-            n_ou += i_len * j_len
-            n_i_block = (i_len - 1) // i_block_size + 1
-            n_j_block = (j_len - 1) // j_block_size + 1
-            for i in range(n_i_block):
-                for j in range(n_j_block):
-                    process_results.append(
-                        pool.apply_async(
-                            show_statistic_result_, (rram_proj,
-                            i * i_block_size, min((i + 1) * i_block_size, i_len),
-                            j * j_block_size, min((j + 1) * j_block_size, j_len)))
-                    )
-    pool.close()
-    pool.join()
-
-    bad_count = 0
-        
-    for j in range(len(process_results)):
-        try:
-            bad_count += process_results[j].get()
-        except:
-            with open(args.work_path + '/error.txt', 'w') as error_file:
-                traceback.print_exc(file=error_file)
-                
-    bad_percent = 100. * bad_count / n_ou
-
-    logger.info("   == bad_count: {}".format(bad_count))
-    logger.info("   == bad_percent: {}%".format(bad_percent))
+    load_checkpoint(args.work_path + '/' + ckpt_name + '.pth.tar', net, optimizer, admm_criterion)
 
 def quantize_weights(weight):
     global args
@@ -252,35 +195,56 @@ def quantize_weights(weight):
     delta_w = weight.abs().max() / h_lvl
     return torch.round(weight / delta_w)
 
-def show_compressed_weights(model, mask, device):
-    ou_width = config.pruning.ou_width
-    ou_height = config.pruning.ou_height
-    row_index = {}
-    non_zero_weights = {}
-    n_ou_cols = {}
+def display_fkwmd(model, admm_criterion, show_seq=False):
+    idx = 0
+    fkw = admm_criterion.get_fkw()
     for name, param in model.named_parameters():
-        if name.split('.')[-1] == "weight":
-            weight = quantize_weights(param.detach().data)
-            rram_proj = weight.view(param.shape[0], -1).T
-            rram_mask = mask[name].view(mask[name].shape[0], -1).T
-            n_ou_cols[name] = (rram_mask.shape[1] - 1) // ou_width + 1
-            row_index[name] = []
-            non_zero_weights[name] = []
-            for i in range(n_ou_cols[name]):
-                non_zero_ou_index = rram_mask[:, i * ou_width].nonzero().flatten()
-                non_zero_ou = rram_proj[non_zero_ou_index, i * ou_width : (i + 1) * ou_width]
-                #non_zero_row_index = []
-                #for i in range(non_zero_ou.shape[0]):
-                #    if non_zero_ou[i, :].nonzero().numel() > 0:
-                #        non_zero_row_index.append(i)
-                #row_index[name].append(non_zero_ou_index[non_zero_row_index])
-                #non_zero_weights[name].append(non_zero_ou[non_zero_row_index, :])
-                row_index[name].append(non_zero_ou_index)
-                non_zero_weights[name].append(non_zero_ou)
-
+        if name.split('.')[-1] == "weight" and len(param.shape) == 4:
             logger.info(name)
-            logger.info("   == row_index: {}".format(row_index[name]))
-            logger.info("   == non_zero_weights: {}".format(non_zero_weights[name]))
+
+            len_subseqs = torch.zeros((len(fkw[idx]), len(fkw[idx])), dtype=torch.int)
+            longest_subseqs = []
+
+            longest_subseq = []
+            longest_subseq_idx = 1
+            for j in range(1, len(fkw[idx])):
+                subseq = LCS(fkw[idx][0], fkw[idx][j])
+                len_subseqs[0, j] = len(subseq)
+                if len(subseq) > len(longest_subseq):
+                    longest_subseq = subseq
+                    longest_subseq_idx = j
+            longest_subseqs.append((longest_subseq_idx, longest_subseq))
+
+            for i in range(1, len(fkw[idx]) - 1):
+                longest_subseq = []
+                longest_subseq_idx = i + 1
+                for j in range(i+1, len(fkw[idx])):
+                    subseq = LCS(fkw[idx][i], fkw[idx][j])
+                    len_subseqs[i, j] = len(subseq)
+                    if len(subseq) > len(longest_subseq):
+                        longest_subseq = subseq
+                        longest_subseq_idx = j
+                pre_max_len, pre_max_len_index = len_subseqs[:i, i].max(dim=0)
+                if len(longest_subseq) < pre_max_len.item():
+                    longest_subseq_idx = pre_max_len_index.item()
+                    subseq = LCS(fkw[idx][i], fkw[idx][longest_subseq_idx])
+                    longest_subseq = subseq
+                longest_subseqs.append((longest_subseq_idx, longest_subseq))
+            
+            logger.info("len subseqs matrix:\n{}".format(len_subseqs))
+            for i in range(len(longest_subseqs)):
+                seq_idx = longest_subseqs[i][0]
+                seq = longest_subseqs[i][1]
+                len_subseq = len_subseqs[i, seq_idx] if i < seq_idx else len_subseqs[seq_idx, i]
+                len_i = len(fkw[idx][i])
+                len_seq_idx = len(fkw[idx][seq_idx])
+                pcen0 = len_subseq * 100.0 / len_i if len_i > 0 else 100.0
+                pcen1 = len_subseq * 100.0 / len_seq_idx if len_seq_idx > 0 else 100.0
+                logger.info("fkw[{}] & fkw[{}]: len = {}, pcen = ({:.1f}%, {:.1f}%)"
+                    .format(i, seq_idx, len_subseq, pcen0, pcen1))
+                if show_seq:
+                    logger.info("  seq: {}".format(seq))
+            idx += 1
 
 def setup_seed(seed):
    torch.manual_seed(seed)
@@ -301,7 +265,7 @@ def main():
     config = EasyDict(config)
     logger.info(config)
 
-    setup_seed(20)
+    setup_seed(2020)
 
     # define network
     net = get_model(config)
@@ -320,32 +284,40 @@ def main():
     # define loss and optimizer
     criterion = nn.CrossEntropyLoss()
     if 'pruning' in config:
-        assert config.pruning.method == 'ADMM'
-        assert config.epochs == config.pruning.pre_epochs + config.pruning.epochs + config.pruning.re_epochs
-        admm_criterion = ADMMLoss(net, device, config.pruning.rho,
-            config.pruning.ou_height, config.pruning.ou_width, config.pruning.percent)
+        assert(config.epochs == config.pruning.pre_epochs + config.pruning.epochs + config.pruning.re_epochs
+            , "ADMM-3-stage epochs must equal to total epochs")
+        admm_criterion = ADMMLoss(net, device, config.pruning.rho, config.pruning.percent, config.pruning.mode)
+        optimizer = PruneSGD(
+            net.named_parameters(),
+            config.lr_scheduler.base_lr,
+            momentum=config.optimize.momentum,
+            weight_decay=config.optimize.weight_decay,
+            nesterov=config.optimize.nesterov)
     else:
         admm_criterion = None
-    
-    optimizer = PruneSGD(
-        net.named_parameters(),
-        config.lr_scheduler.base_lr,
-        momentum=config.optimize.momentum,
-        weight_decay=config.optimize.weight_decay,
-        nesterov=config.optimize.nesterov)
+        optimizer = torch.optim.SGD(
+            net.parameters(),
+            config.lr_scheduler.base_lr,
+            momentum=config.optimize.momentum,
+            weight_decay=config.optimize.weight_decay,
+            nesterov=config.optimize.nesterov)
 
     # resume from a checkpoint
-    last_epoch = -1
-    best_prec = 0
-
     if 'pruning' in config:
-        ckpt_name = "{}_{}x{}".format(config.ckpt_name, config.pruning.ou_height, config.pruning.ou_width)
+        if config.pruning.mode == 'unstructured':
+            ckpt_name = "{}_unstruct".format(config.ckpt_name)
+        elif config.pruning.mode == 'grid-based':
+            ckpt_name = "{}_grid_{}x{}".format(config.ckpt_name, config.pruning.grid_height, config.pruning.grid_width)
+        elif config.pruning.mode == 'pattern-based':
+            ckpt_name = "{}_pattern_{}x{}".format(config.ckpt_name, config.pruning.size_pattern, config.pruning.num_patterns)
     else:
         ckpt_name = config.ckpt_name
     ckpt_file_name = args.work_path + '/' + ckpt_name + '.pth.tar'
-    if args.resume:
+    if not args.restart:
         best_prec, last_epoch = load_checkpoint(
             ckpt_file_name, net, optimizer=optimizer, admm_criterion=admm_criterion)
+    else:
+        best_prec, last_epoch = 0, -1
 
     # load training data, do data augmentation and get data loader
     transform_train = transforms.Compose(
@@ -372,6 +344,15 @@ def main():
                 "======== Pre-Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
         if begin_epoch < config.pruning.pre_epochs + config.pruning.epochs:
+            if config.pruning.mode == 'pattern-based' and not admm_criterion.is_natural_patterns_extracted():
+                # only consider 3x3 weight kernel
+                logger.info("            =======  Extracting Natural Patterns  =======\n")
+                admm_criterion.extract_natural_patterns(
+                    config.pruning.size_pattern, config.pruning.percent, config.pruning.num_patterns)
+                logger.info("======== Extracting Natural Patterns Finished. ========\n")
+            elif config.pruning.mode == 'grid-based':
+                admm_criterion.set_grid_size(config.pruning.grid_height, config.pruning.grid_width)
+
             admm_begin_epoch = max(begin_epoch, config.pruning.pre_epochs)
             logger.info("            =======  Training with ADMM Pruning  =======\n")
             for epoch in range(admm_begin_epoch, config.pruning.pre_epochs + config.pruning.epochs):
@@ -389,22 +370,24 @@ def main():
                     _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
                     save_checkpoint_(net, test_acc * 100., epoch, optimizer, admm_criterion.get_state(), ckpt_name)
             logger.info(
-                "======== Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
-
-            logger.info("            =======  Applying ADMM Pruning  =======")
-            admm_criterion.apply_pruning()
-            prune_param, total_param = 0, 0
-            for name, param in net.named_parameters():
-                if name.split('.')[-1] == "weight":
-                    logger.info("   ==  [at weight {}]  ==".format(name))
-                    logger.info("   ==  percentage of pruned: {:.4f}%  ==".format(100 * (abs(param) == 0).sum().item() / param.numel()))
-                    logger.info("   ==  nonzero parameters after pruning: {} / {}  ==".format((param != 0).sum().item(), param.numel()))
-                total_param += param.numel()
-                prune_param += (param != 0).sum().item()
-            logger.info("   ==  Total nonzero parameters after pruning: {} / {} ({:.4f}%)  ==\n".
-                format(prune_param, total_param, 100 * (total_param - prune_param) / total_param))
+                "======== Training with ADMM Pruning Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
         if begin_epoch < config.epochs:
+            if not admm_criterion.is_pruning_applied():
+                logger.info("            =======  Applying ADMM Pruning  =======\n")
+                admm_criterion.apply_pruning()
+                prune_param, total_param = 0, 0
+                for name, param in net.named_parameters():
+                    if name.split('.')[-1] == "weight" and len(param.shape) == 4:
+                        logger.info("   ==  [at weight {}]  ==".format(name))
+                        logger.info("   ==  percentage of pruned: {:.4f}%  ==".format(100 * (abs(param) == 0).sum().item() / param.numel()))
+                        logger.info("   ==  nonzero parameters after pruning: {} / {}  ==".format((param != 0).sum().item(), param.numel()))
+                    total_param += param.numel()
+                    prune_param += (param != 0).sum().item()
+                logger.info("   ==  Total nonzero parameters after pruning: {} / {} ({:.4f}%)  ==\n".
+                    format(prune_param, total_param, 100 * (total_param - prune_param) / total_param))
+                logger.info("======== Applying ADMM Pruning Finished. ========\n")
+
             retrain_begin_epoch = max(begin_epoch, config.pruning.pre_epochs + config.pruning.epochs)
             logger.info("            =======  Re-Training  =======\n")
             for epoch in range(retrain_begin_epoch, config.epochs):
@@ -419,9 +402,9 @@ def main():
             logger.info(
                 "======== Re-Training Finished.   best_test_acc: {:.3f}% ========\n".format(best_prec))
 
-        if args.compress:
-            logger.info("            =======  Showing Compressed Weights  =======\n")
-            show_compressed_weights(net, admm_criterion.get_mask(), device)
+        if args.display_fkwmd:
+            logger.info("            =======  Displaying Matching Degree between each FKW after Reordering  =======\n")
+            display_fkwmd(net, admm_criterion)
         
     else:
         logger.info("            =======  Training  =======\n")
@@ -433,7 +416,7 @@ def main():
                 _, test_acc = test(test_loader, net, criterion, optimizer, epoch, device)
                 save_checkpoint_(net, test_acc * 100., epoch, optimizer, None, ckpt_name)
         logger.info(
-        "======== Training Finished.   best_test_acc: {:.3f}% ========".format(best_prec))
+            "======== Training Finished.   best_test_acc: {:.3f}% ========".format(best_prec))
     writer.close()
 
 

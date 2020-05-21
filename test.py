@@ -96,7 +96,10 @@ def main():
     # define loss and optimizer
     criterion = nn.CrossEntropyLoss()
     
-    ckpt_name = "{}_{}x{}".format(config.ckpt_name, config.ou_height, config.ou_width)
+    if 'pruning' in config:
+        ckpt_name = "{}_{}x{}".format(config.ckpt_name, config.pruning.size_pattern, config.pruning.num_patterns)
+    else:
+        ckpt_name = config.ckpt_name
     ckpt_file_name = args.work_path + '/' + ckpt_name + '.pth.tar'
     load_model(ckpt_file_name, net)
 

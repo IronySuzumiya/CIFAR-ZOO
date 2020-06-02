@@ -143,7 +143,7 @@ class ADMMLoss(nn.Module):
             z = x + u
             rram = z.view(z.shape[0], -1)
             if self.grid_height == 1:
-                sums = rram.T.view(-1, self.grid_width).sum(dim=1).view(rram.shape[1], -1).T
+                sums = rram.T.reshape(-1, self.grid_width).sum(dim=1).view(rram.shape[1], -1).T
             elif self.grid_width == 1:
                 sums = rram.view(-1, self.grid_height).sum(dim=1).view(rram.shape[0], -1)
             else:
@@ -233,7 +233,7 @@ class ADMMLoss(nn.Module):
                 rram = param.view(param.shape[0], -1)
                 rram_mask = mask.view(mask.shape[0], -1)
                 if self.grid_height == 1:
-                    norm = rram.T.shape(-1, self.grid_width).norm(dim=1).view(rram.shape[1], -1).T
+                    norm = rram.T.reshape(-1, self.grid_width).norm(dim=1).view(rram.shape[1], -1).T
                 elif self.grid_width == 1:
                     norm = rram.view(-1, self.grid_height).norm(dim=1).view(rram.shape[0], -1)
                 else:
@@ -267,7 +267,7 @@ class ADMMLoss(nn.Module):
                 rram = param.view(param.shape[0], -1)
                 rram_mask = mask.view(mask.shape[0], -1)
                 if self.grid_height == 1:
-                    sums = rram.T.view(-1, self.grid_width).sum(dim=1).view(rram.shape[1], -1).T
+                    sums = rram.T.reshape(-1, self.grid_width).sum(dim=1).view(rram.shape[1], -1).T
                 elif self.grid_width == 1:
                     sums = rram.view(-1, self.grid_height).sum(dim=1).view(rram.shape[0], -1)
                 else:

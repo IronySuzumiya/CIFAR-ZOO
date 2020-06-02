@@ -149,8 +149,15 @@ class ADMMLoss(nn.Module):
             else:
                 sums = torch.zeros(((rram.shape[0] - 1) // self.grid_width + 1, (rram.shape[1] - 1) // self.grid_height + 1)).to(self.device)
                 admm_cuda_lib.struct_sum(rram, sums, self.grid_width, self.grid_height)
-            pcen, _ = sums.abs().reshape(-1).kthvalue(round(self.percent[idx] * sums.numel()))
-            upon_threshold = sums.abs() >= pcen
+            #pcen, _ = sums.abs().reshape(-1).kthvalue(round(self.percent[idx] * sums.numel()))
+            #upon_threshold = sums.abs() >= pcen
+            pos_sums = F.relu(sums)
+            neg_sums = F.relu(-sums)
+            num_pos_sums = len(pos_sums.nonzero())
+            num_neg_sums = len(neg_sums.nonzero())
+            pos_pcen, _ = pos_sums.view(-1).kthvalue(round((1 - (1 - self.percent[idx]) * (num_pos_sums / (num_pos_sums + num_neg_sums))) * sums.numel()))
+            neg_pcen, _ = neg_sums.view(-1).kthvalue(round((1 - (1 - self.percent[idx]) * (num_neg_sums / (num_pos_sums + num_neg_sums))) * sums.numel()))
+            upon_threshold = (sums >= pos_pcen) | (sums <= -neg_pcen)
             res1 = rram.shape[0] % self.grid_width
             res2 = rram.shape[1] % self.grid_height
             for i in range(self.grid_width):
@@ -273,9 +280,16 @@ class ADMMLoss(nn.Module):
                 else:
                     sums = torch.zeros(((rram.shape[0] - 1) // self.grid_width + 1, (rram.shape[1] - 1) // self.grid_height + 1)).to(self.device)
                     admm_cuda_lib.struct_sum(rram, sums, self.grid_width, self.grid_height)
-                pcen, _ = sums.abs().reshape(-1).kthvalue(round(self.percent[idx] * sums.numel()))
-                pos_upon_threshold = (sums >= pcen).int()
-                neg_upon_threshold = (sums <= -pcen).int()
+                #pcen, _ = sums.abs().reshape(-1).kthvalue(round(self.percent[idx] * sums.numel()))
+                pos_sums = F.relu(sums)
+                neg_sums = F.relu(-sums)
+                num_pos_sums = len(pos_sums.nonzero())
+                num_neg_sums = len(neg_sums.nonzero())
+                pos_pcen, _ = pos_sums.view(-1).kthvalue(round((1 - (1 - self.percent[idx]) * (num_pos_sums / (num_pos_sums + num_neg_sums))) * sums.numel()))
+                neg_pcen, _ = neg_sums.view(-1).kthvalue(round((1 - (1 - self.percent[idx]) * (num_neg_sums / (num_pos_sums + num_neg_sums))) * sums.numel()))
+                #upon_threshold = (sums >= pos_pcen) | (sums <= neg_pcen)
+                pos_upon_threshold = (sums >= pos_pcen).int()
+                neg_upon_threshold = (sums <= -neg_pcen).int()
                 upon_threshold = pos_upon_threshold | -neg_upon_threshold
                 res1 = rram.shape[0] % self.grid_width
                 res2 = rram.shape[1] % self.grid_height

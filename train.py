@@ -252,7 +252,7 @@ def display_fkwmd(model, admm_criterion, show_seq=False):
                     logger.info("  seq: {}".format(seq))
             idx += 1
 
-def calc_and_save_best_channel_matches_(fkw, name):
+def calc_and_save_best_channel_matches_(fkw, name, filename):
     logger.info("=====  {} running...  =====".format(name))
 
     matches = []
@@ -284,9 +284,9 @@ def calc_and_save_best_channel_matches_(fkw, name):
 
     left_4_dead_percent = num_left_units * 100.0 / num_total_units if num_total_units else 0.0
 
-    logger.info("=====  {} done.  =====".format(name))
+    torch.save((matches, left_4_dead_percent), filename)
 
-    return matches, left_4_dead_percent
+    logger.info("=====  {} done.  =====".format(name))
 
 def calc_and_save_best_channel_matches(model, admm_criterion, ckpt_name):
     idx = 0
@@ -295,8 +295,9 @@ def calc_and_save_best_channel_matches(model, admm_criterion, ckpt_name):
     process_results = []
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight" and len(param.shape) == 4:
+            file_name = args.work_path + '/' + ckpt_name + '_' + name + '.bcm'
             process_results.append(
-                pool.apply_async(calc_and_save_best_channel_matches_, (fkw[idx], name))
+                pool.apply_async(calc_and_save_best_channel_matches_, (fkw[idx], name, file_name))
             )
             idx += 1
     
@@ -306,13 +307,11 @@ def calc_and_save_best_channel_matches(model, admm_criterion, ckpt_name):
     idx = 0
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight" and len(param.shape) == 4:
-            file_name = args.work_path + '/' + ckpt_name + '_' + name + '.bcm'
             try:
-                matches, left_4_dead_percent = process_results[idx].get()
+                process_results[idx].get()
             except:
                 with open(args.work_path + '/error.txt', 'w') as error_file:
                     traceback.print_exc(file=error_file)
-            torch.save((matches, left_4_dead_percent), file_name)
             idx += 1
 
     logger.info("=====  All done.  =====")
@@ -375,8 +374,8 @@ def main():
     # define loss and optimizer
     criterion = nn.CrossEntropyLoss()
     if 'pruning' in config:
-        assert(config.epochs == config.pruning.pre_epochs + config.pruning.epochs + config.pruning.re_epochs
-            , "ADMM-3-stage epochs must equal to total epochs")
+        assert(config.epochs == config.pruning.pre_epochs + config.pruning.epochs + config.pruning.re_epochs,
+            "ADMM-3-stage epochs must equal to total epochs")
         admm_criterion = ADMMLoss(net, device, config.pruning.rho, config.pruning.percent, config.pruning.mode)
         optimizer = PruneSGD(
             net.named_parameters(),

@@ -20,10 +20,12 @@ class ADMMLoss(nn.Module):
         self.update_Z = self.update_Z_unstructured if mode == 'unstructured' \
             else self.update_Z_grid_based if mode == 'grid-based' \
             else self.update_Z_pattern_based if mode == 'pattern-based' \
+            else self.update_Z_grid_based_sign_separate if mode == 'grid-based-sign-separate' \
             else self.update_Z_unimplemented
         self.apply_pruning = self.apply_pruning_unstructured if mode == 'unstructured' \
             else self.apply_pruning_grid_based if mode == 'grid-based' \
             else self.apply_pruning_pattern_based if mode == 'pattern-based' \
+            else self.apply_pruning_grid_based_sign_separate if mode == 'grid-based-sign-separate' \
             else self.apply_pruning_unimplemented
         for name, param in model.named_parameters():
             if name.split('.')[-1] == "weight" and len(param.shape) == 4:
@@ -82,6 +84,9 @@ class ADMMLoss(nn.Module):
     def set_grid_size(self, grid_height, grid_width):
         self.grid_height = grid_height
         self.grid_width = grid_width
+        if grid_height == 1 and grid_width == 1:
+            self.update_Z = self.update_Z_unstructured
+            self.apply_pruning = self.apply_pruning_unstructured
 
     def update_ADMM(self):
         self.update_X()
@@ -111,10 +116,41 @@ class ADMMLoss(nn.Module):
         for x, u in zip(self.X, self.U):
             z = x + u
             rram = z.view(z.shape[0], -1)
-            tmp = torch.zeros(((rram.shape[0] - 1) // self.grid_width + 1, (rram.shape[1] - 1) // self.grid_height + 1)).to(self.device)
-            admm_cuda_lib.struct_norm(rram, tmp, self.grid_width, self.grid_height)
-            pcen, _ = tmp.view(-1).kthvalue(round(self.percent[idx] * tmp.numel()))
-            upon_threshold = tmp >= pcen
+            if self.grid_height == 1:
+                norm = rram.T.view(-1, self.grid_width).norm(dim=1).view(rram.shape[1], -1).T
+            elif self.grid_width == 1:
+                norm = rram.view(-1, self.grid_height).norm(dim=1).view(rram.shape[0], -1)
+            else:
+                norm = torch.zeros(((rram.shape[0] - 1) // self.grid_width + 1, (rram.shape[1] - 1) // self.grid_height + 1)).to(self.device)
+                admm_cuda_lib.struct_norm(rram, norm, self.grid_width, self.grid_height)
+            pcen, _ = norm.view(-1).kthvalue(round(self.percent[idx] * norm.numel()))
+            upon_threshold = norm >= pcen
+            res1 = rram.shape[0] % self.grid_width
+            res2 = rram.shape[1] % self.grid_height
+            for i in range(self.grid_width):
+                for j in range(self.grid_height):
+                    if i < res1 or res1 == 0:
+                        rram.data[i::self.grid_width, j::self.grid_height] *= upon_threshold if j < res2 or res2 == 0 else upon_threshold[:, :-1]
+                    else:
+                        rram.data[i::self.grid_width, j::self.grid_height] *= upon_threshold[:-1, :] if j < res2 or res2 == 0 else upon_threshold[:-1, :-1]
+            self.Z += (z,)
+            idx += 1
+
+    def update_Z_grid_based_sign_separate(self):
+        self.Z = ()
+        idx = 0
+        for x, u in zip(self.X, self.U):
+            z = x + u
+            rram = z.view(z.shape[0], -1)
+            if self.grid_height == 1:
+                sums = rram.T.view(-1, self.grid_width).sum(dim=1).view(rram.shape[1], -1).T
+            elif self.grid_width == 1:
+                sums = rram.view(-1, self.grid_height).sum(dim=1).view(rram.shape[0], -1)
+            else:
+                sums = torch.zeros(((rram.shape[0] - 1) // self.grid_width + 1, (rram.shape[1] - 1) // self.grid_height + 1)).to(self.device)
+                admm_cuda_lib.struct_sum(rram, sums, self.grid_width, self.grid_height)
+            pcen, _ = sums.abs().view(-1).kthvalue(round(self.percent[idx] * sums.numel()))
+            upon_threshold = sums.abs() >= pcen
             res1 = rram.shape[0] % self.grid_width
             res2 = rram.shape[1] % self.grid_height
             for i in range(self.grid_width):
@@ -196,8 +232,13 @@ class ADMMLoss(nn.Module):
                 mask = torch.zeros_like(param, dtype=torch.bool).to(self.device)
                 rram = param.view(param.shape[0], -1)
                 rram_mask = mask.view(mask.shape[0], -1)
-                norm = torch.zeros(((rram.shape[0] - 1) // self.grid_width + 1, (rram.shape[1] - 1) // self.grid_height + 1)).to(self.device)
-                admm_cuda_lib.struct_norm(rram, norm, self.grid_width, self.grid_height)
+                if self.grid_height == 1:
+                    norm = rram.T.view(-1, self.grid_width).norm(dim=1).view(rram.shape[1], -1).T
+                elif self.grid_width == 1:
+                    norm = rram.view(-1, self.grid_height).norm(dim=1).view(rram.shape[0], -1)
+                else:
+                    norm = torch.zeros(((rram.shape[0] - 1) // self.grid_width + 1, (rram.shape[1] - 1) // self.grid_height + 1)).to(self.device)
+                    admm_cuda_lib.struct_norm(rram, norm, self.grid_width, self.grid_height)
                 pcen, _ = norm.view(-1).kthvalue(round(self.percent[idx] * norm.numel()))
                 upon_threshold = norm >= pcen
                 res1 = rram.shape[0] % self.grid_width
@@ -208,6 +249,44 @@ class ADMMLoss(nn.Module):
                             rram_mask.data[i::self.grid_width, j::self.grid_height] = upon_threshold if j < res2 or res2 == 0 else upon_threshold[:, :-1]
                         else:
                             rram_mask.data[i::self.grid_width, j::self.grid_height] = upon_threshold[:-1, :] if j < res2 or res2 == 0 else upon_threshold[:-1, :-1]
+                param.data.mul_(mask)
+                self.dict_mask[name] = mask
+                idx += 1
+                self.fkw.append([])
+                for i in range(upon_threshold.shape[0]):
+                    self.fkw[-1].append(upon_threshold[i, :].nonzero().view(-1).tolist())
+
+    def apply_pruning_grid_based_sign_separate(self):
+        self.dict_mask = {}
+        self.fkw = []
+        idx = 0
+
+        for name, param in self.model.named_parameters():
+            if name.split('.')[-1] == "weight" and len(param.shape) == 4:
+                mask = torch.zeros_like(param, dtype=torch.int).to(self.device)
+                rram = param.view(param.shape[0], -1)
+                rram_mask = mask.view(mask.shape[0], -1)
+                if self.grid_height == 1:
+                    sums = rram.T.view(-1, self.grid_width).sum(dim=1).view(rram.shape[1], -1).T
+                elif self.grid_width == 1:
+                    sums = rram.view(-1, self.grid_height).sum(dim=1).view(rram.shape[0], -1)
+                else:
+                    sums = torch.zeros(((rram.shape[0] - 1) // self.grid_width + 1, (rram.shape[1] - 1) // self.grid_height + 1)).to(self.device)
+                    admm_cuda_lib.struct_sum(rram, sums, self.grid_width, self.grid_height)
+                pcen, _ = sums.abs().view(-1).kthvalue(round(self.percent[idx] * sums.numel()))
+                pos_upon_threshold = (sums >= pcen).int()
+                neg_upon_threshold = (sums <= -pcen).int()
+                upon_threshold = pos_upon_threshold | -neg_upon_threshold
+                res1 = rram.shape[0] % self.grid_width
+                res2 = rram.shape[1] % self.grid_height
+                for i in range(self.grid_width):
+                    for j in range(self.grid_height):
+                        if i < res1 or res1 == 0:
+                            rram_mask.data[i::self.grid_width, j::self.grid_height] = upon_threshold if j < res2 or res2 == 0 else upon_threshold[:, :-1]
+                        else:
+                            rram_mask.data[i::self.grid_width, j::self.grid_height] = upon_threshold[:-1, :] if j < res2 or res2 == 0 else upon_threshold[:-1, :-1]
+                param.data.mul_(mask)
+                param.data.abs_()
                 param.data.mul_(mask)
                 self.dict_mask[name] = mask
                 idx += 1

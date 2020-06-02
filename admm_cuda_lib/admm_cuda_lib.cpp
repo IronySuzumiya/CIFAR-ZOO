@@ -7,6 +7,12 @@ void struct_norm_cuda(
     int grid_w,
     int grid_h);
 
+void struct_sum_cuda(
+    torch::Tensor weights,
+    torch::Tensor sums,
+    int grid_w,
+    int grid_h);
+
 #define CHECK_CUDA(x) TORCH_CHECK(x.type().is_cuda(), #x " must be a CUDA tensor")
 #define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
 #define CHECK_INPUT(x) \
@@ -25,7 +31,19 @@ void struct_norm(
     struct_norm_cuda(weights, norms, grid_w, grid_h);
 }
 
+void struct_sum(
+    torch::Tensor weights,
+    torch::Tensor sums,
+    int grid_w,
+    int grid_h)
+{
+    CHECK_INPUT(weights);
+    CHECK_INPUT(sums);
+    struct_sum_cuda(weights, sums, grid_w, grid_h);
+}
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
     m.def("struct_norm", &struct_norm, "in-place struct_norm");
+    m.def("struct_sum", &struct_sum, "in-place struct_sum");
 }

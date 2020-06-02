@@ -390,7 +390,8 @@ def main():
             config.lr_scheduler.base_lr,
             momentum=config.optimize.momentum,
             weight_decay=config.optimize.weight_decay,
-            nesterov=config.optimize.nesterov)
+            nesterov=config.optimize.nesterov,
+            signed=config.pruning.mode == 'grid-based-sign-separate' and (config.pruning.grid_height != 1 or config.pruning.grid_width != 1))
 
     # resume from a checkpoint
     if 'pruning' in config:

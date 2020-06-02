@@ -401,6 +401,8 @@ def main():
             ckpt_name = "{}_grid_{}x{}".format(config.ckpt_name, config.pruning.grid_height, config.pruning.grid_width)
         elif config.pruning.mode == 'pattern-based':
             ckpt_name = "{}_pattern_{}x{}".format(config.ckpt_name, config.pruning.size_pattern, config.pruning.num_patterns)
+        elif config.pruning.mode == 'grid-based-sign-separate':
+            ckpt_name = "{}_signed_grid_{}x{}".format(config.ckpt_name, config.pruning.size_pattern, config.pruning.num_patterns)
     else:
         ckpt_name = config.ckpt_name
     ckpt_file_name = args.work_path + '/' + ckpt_name + '.pth.tar'

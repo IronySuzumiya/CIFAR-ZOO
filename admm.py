@@ -155,8 +155,8 @@ class ADMMLoss(nn.Module):
             neg_sums = F.relu(-sums)
             num_pos_sums = len(pos_sums.nonzero())
             num_neg_sums = len(neg_sums.nonzero())
-            pos_pcen, _ = pos_sums.view(-1).kthvalue(round((1 - (1 - self.percent[idx]) * (num_pos_sums / (num_pos_sums + num_neg_sums))) * sums.numel()))
-            neg_pcen, _ = neg_sums.view(-1).kthvalue(round((1 - (1 - self.percent[idx]) * (num_neg_sums / (num_pos_sums + num_neg_sums))) * sums.numel()))
+            pos_pcen, _ = pos_sums.reshape(-1).kthvalue(round((1 - (1 - self.percent[idx]) * (num_pos_sums / (num_pos_sums + num_neg_sums))) * sums.numel()))
+            neg_pcen, _ = neg_sums.reshape(-1).kthvalue(round((1 - (1 - self.percent[idx]) * (num_neg_sums / (num_pos_sums + num_neg_sums))) * sums.numel()))
             upon_threshold = (sums >= pos_pcen) | (sums <= -neg_pcen)
             res1 = rram.shape[0] % self.grid_width
             res2 = rram.shape[1] % self.grid_height
@@ -285,8 +285,8 @@ class ADMMLoss(nn.Module):
                 neg_sums = F.relu(-sums)
                 num_pos_sums = len(pos_sums.nonzero())
                 num_neg_sums = len(neg_sums.nonzero())
-                pos_pcen, _ = pos_sums.view(-1).kthvalue(round((1 - (1 - self.percent[idx]) * (num_pos_sums / (num_pos_sums + num_neg_sums))) * sums.numel()))
-                neg_pcen, _ = neg_sums.view(-1).kthvalue(round((1 - (1 - self.percent[idx]) * (num_neg_sums / (num_pos_sums + num_neg_sums))) * sums.numel()))
+                pos_pcen, _ = pos_sums.reshape(-1).kthvalue(round((1 - (1 - self.percent[idx]) * (num_pos_sums / (num_pos_sums + num_neg_sums))) * sums.numel()))
+                neg_pcen, _ = neg_sums.reshape(-1).kthvalue(round((1 - (1 - self.percent[idx]) * (num_neg_sums / (num_pos_sums + num_neg_sums))) * sums.numel()))
                 #upon_threshold = (sums >= pos_pcen) | (sums <= neg_pcen)
                 pos_upon_threshold = (sums >= pos_pcen).int()
                 neg_upon_threshold = (sums <= -neg_pcen).int()

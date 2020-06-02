@@ -443,7 +443,7 @@ def main():
                 admm_criterion.extract_natural_patterns(
                     config.pruning.size_pattern, config.pruning.percent, config.pruning.num_patterns)
                 logger.info("======== Extracting Natural Patterns Finished. ========\n")
-            elif config.pruning.mode == 'grid-based':
+            elif config.pruning.mode == 'grid-based' or config.pruning.mode == 'grid-based-sign-separate':
                 admm_criterion.set_grid_size(config.pruning.grid_height, config.pruning.grid_width)
 
             admm_begin_epoch = max(begin_epoch, config.pruning.pre_epochs)

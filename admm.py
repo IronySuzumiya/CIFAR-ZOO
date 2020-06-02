@@ -123,7 +123,7 @@ class ADMMLoss(nn.Module):
             else:
                 norm = torch.zeros(((rram.shape[0] - 1) // self.grid_width + 1, (rram.shape[1] - 1) // self.grid_height + 1)).to(self.device)
                 admm_cuda_lib.struct_norm(rram, norm, self.grid_width, self.grid_height)
-            pcen, _ = norm.view(-1).kthvalue(round(self.percent[idx] * norm.numel()))
+            pcen, _ = norm.reshape(-1).kthvalue(round(self.percent[idx] * norm.numel()))
             upon_threshold = norm >= pcen
             res1 = rram.shape[0] % self.grid_width
             res2 = rram.shape[1] % self.grid_height
@@ -149,7 +149,7 @@ class ADMMLoss(nn.Module):
             else:
                 sums = torch.zeros(((rram.shape[0] - 1) // self.grid_width + 1, (rram.shape[1] - 1) // self.grid_height + 1)).to(self.device)
                 admm_cuda_lib.struct_sum(rram, sums, self.grid_width, self.grid_height)
-            pcen, _ = sums.abs().view(-1).kthvalue(round(self.percent[idx] * sums.numel()))
+            pcen, _ = sums.abs().reshape(-1).kthvalue(round(self.percent[idx] * sums.numel()))
             upon_threshold = sums.abs() >= pcen
             res1 = rram.shape[0] % self.grid_width
             res2 = rram.shape[1] % self.grid_height
@@ -239,7 +239,7 @@ class ADMMLoss(nn.Module):
                 else:
                     norm = torch.zeros(((rram.shape[0] - 1) // self.grid_width + 1, (rram.shape[1] - 1) // self.grid_height + 1)).to(self.device)
                     admm_cuda_lib.struct_norm(rram, norm, self.grid_width, self.grid_height)
-                pcen, _ = norm.view(-1).kthvalue(round(self.percent[idx] * norm.numel()))
+                pcen, _ = norm.reshape(-1).kthvalue(round(self.percent[idx] * norm.numel()))
                 upon_threshold = norm >= pcen
                 res1 = rram.shape[0] % self.grid_width
                 res2 = rram.shape[1] % self.grid_height
@@ -273,7 +273,7 @@ class ADMMLoss(nn.Module):
                 else:
                     sums = torch.zeros(((rram.shape[0] - 1) // self.grid_width + 1, (rram.shape[1] - 1) // self.grid_height + 1)).to(self.device)
                     admm_cuda_lib.struct_sum(rram, sums, self.grid_width, self.grid_height)
-                pcen, _ = sums.abs().view(-1).kthvalue(round(self.percent[idx] * sums.numel()))
+                pcen, _ = sums.abs().reshape(-1).kthvalue(round(self.percent[idx] * sums.numel()))
                 pos_upon_threshold = (sums >= pcen).int()
                 neg_upon_threshold = (sums <= -pcen).int()
                 upon_threshold = pos_upon_threshold | -neg_upon_threshold
